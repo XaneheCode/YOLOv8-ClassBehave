@@ -57,3 +57,42 @@
 ```
 
 正常坐姿应保持 normal 状态。趴桌姿态持续超过 3 秒后，应出现报警提示，并在 `output/alarms` 下生成报警记录。
+
+## 下载课堂行为数据集
+
+Roboflow 下载数据集需要 API key。登录 Roboflow 后，在账户设置或数据集下载代码中复制 API key，然后只在当前终端设置环境变量：
+
+```powershell
+$env:ROBOFLOW_API_KEY="你的 Roboflow API Key"
+.\.venv\Scripts\python.exe .\scripts\download_roboflow_dataset.py
+```
+
+默认下载目标是 `datasets/student-classroom-activity-v2`，导出格式是 YOLOv8。脚本使用的数据集信息：
+
+- workspace: `studentactivity`
+- project: `new-student-classroom-activity-2`
+- version: `2`
+- format: `yolov8`
+
+下载完成后，目录中应包含：
+
+```txt
+datasets/student-classroom-activity-v2/
+  data.yaml
+  test/images/
+  train/images/
+  valid/images/
+```
+
+## 离线测试 test/images
+
+下载完成后，可以用 `test/images` 批量做离线推理：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\offline_test_images.py --dataset datasets/student-classroom-activity-v2 --model yolov8n.pt --limit 50
+```
+
+输出结果：
+
+- `output/offline_test/student-classroom-activity-v2/predictions.csv`
+- `output/offline_test/student-classroom-activity-v2/*.jpg` 标注结果图
