@@ -23,16 +23,16 @@
 
 ## 后端启动
 
-在后端笔记本运行：
+验收和成果展示时，后端默认使用训练后的 12 类课堂行为模型：
+
+```powershell
+.\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model output\training\student_behaviour_yolov8n_e3\weights\best.pt
+```
+
+如果只想验证基础环境，也可以临时使用通用模型：
 
 ```powershell
 .\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model yolov8n.pt
-```
-
-如果已经完成课堂行为数据集训练，建议改用自定义模型：
-
-```powershell
-.\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model output\training\student_sleep_yolov8n_e3\weights\best.pt
 ```
 
 记录后端笔记本的无线网卡 IPv4 地址，例如 `192.168.1.20`。
@@ -48,23 +48,95 @@
 ## 验收演示
 
 1. 后端显示前端摄像头画面。
-2. 后端画面显示检测框和检测标签。
-3. 出现疑似趴桌睡觉动作并持续 3 秒后，后端显示报警信息。
-4. `output/alarms/alarms.csv` 保存报警记录。
-5. `output/alarms/*.jpg` 保存报警截图。
+2. 后端画面显示每个检测目标的类别、状态和置信度。
+3. 正常状态框显示绿色，异常状态框显示红色；红色只作用于对应异常目标。
+4. 异常状态持续 3 秒后，后端显示报警信息。
+5. `output/alarms/alarms.csv` 保存报警记录。
+6. `output/alarms/*.jpg` 保存报警截图。
+
+异常状态：
+
+- `Using_phone`
+- `phone`
+- `sleep`
+- `bend`
+- `bow_head`
+- `turn_head`
+
+正常状态：
+
+- `upright`
+- `reading`
+- `writing`
+- `book`
+- `hand-raising`
+- `raise_head`
 
 ## 单机烟测
 
 在没有第二台笔记本时，可以先在同一台电脑上完成闭环测试：
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.backend.app --host 127.0.0.1 --port 5001 --model yolov8n.pt
+.\.venv\Scripts\python.exe -m src.backend.app --host 127.0.0.1 --port 5001 --model output\training\student_behaviour_yolov8n_e3\weights\best.pt
 .\.venv\Scripts\python.exe -m src.frontend.camera_client --host 127.0.0.1 --port 5001 --camera 0
 ```
 
-正常坐姿应保持 normal 状态。趴桌姿态持续超过 3 秒后，应出现报警提示，并在 `output/alarms` 下生成报警记录。
+正常坐姿应保持 normal 状态。睡觉、玩手机、低头、弯腰或转头等异常状态持续超过 3 秒后，应出现报警提示，并在 `output/alarms` 下生成报警记录。
 
-## 下载课堂行为数据集
+## 多状态模型训练与离线测试
+
+当前多状态数据集目录：
+
+```text
+datasets/Student Behaviour Detection.v6i.yolov8
+```
+
+生成本地 YOLO 配置：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\prepare_yolo_data_yaml.py --dataset "datasets\Student Behaviour Detection.v6i.yolov8" --output tmp\student-behaviour-detection-abs.yaml
+```
+
+训练 12 类课堂行为模型：
+
+```powershell
+.\.venv\Scripts\yolo.exe detect train data=tmp\student-behaviour-detection-abs.yaml model=yolov8n.pt epochs=3 imgsz=320 batch=8 device=cpu workers=0 project=output\training name=student_behaviour_yolov8n_e3 exist_ok=True
+```
+
+如果训练结果被 Ultralytics 保存到 `runs/detect/output/training/student_behaviour_yolov8n_e3`，可以直接把该目录复制到 `output/training/student_behaviour_yolov8n_e3`。
+
+使用 `test/images` 离线测试：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\offline_test_images.py --dataset "datasets\Student Behaviour Detection.v6i.yolov8" --model output\training\student_behaviour_yolov8n_e3\weights\best.pt --output-dir output\offline_test\student-behaviour-custom-e3 --limit 0 --conf 0.25
+```
+
+本轮训练和测试记录见：
+
+- `docs/course-evidence/student-behaviour-custom-e3-test.md`
+
+## 后端打包
+
+重新生成后端交付包：
+
+```powershell
+.\scripts\package_backend.ps1
+```
+
+打包产物：
+
+- `dist/backend-student-sleep-server.zip`
+- `dist/backend-student-sleep-server/`
+
+后端包内包含训练后的模型、后端程序、公共模块、依赖文件和 `START_BACKEND.ps1`。
+
+默认打包模型：
+
+```text
+output/training/student_behaviour_yolov8n_e3/weights/best.pt
+```
+
+## 可选：下载旧三分类数据集
 
 Roboflow 下载数据集需要 API key。登录 Roboflow 后，在账户设置或数据集下载代码中复制 API key，然后只在当前终端设置环境变量：
 
@@ -90,7 +162,7 @@ datasets/student-classroom-activity-v2/
   valid/images/
 ```
 
-## 离线测试 test/images
+## 可选：旧三分类数据集离线测试
 
 下载完成后，可以用 `test/images` 批量做离线推理：
 

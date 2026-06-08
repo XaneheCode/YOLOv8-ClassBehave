@@ -9,11 +9,11 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from src.backend.behaviour_analyzer import BehaviourAnalyzer
 from src.backend.detector import YoloDetector
-from src.backend.sleep_analyzer import SleepAnalyzer
 from src.common.image_codec import decode_jpeg
 from src.common.protocol import recv_packet
-from src.common.types import AlarmState, Detection
+from src.common.types import AlarmState, DetectionAssessment
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -28,20 +28,34 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def draw_overlay(
     frame: np.ndarray,
-    detections: list[Detection],
+    assessments: list[DetectionAssessment],
     alarm: AlarmState,
     fps: float,
     latency_ms: int,
 ) -> np.ndarray:
     output = frame.copy()
-    for detection in detections:
+    for assessment in assessments:
+        detection = assessment.detection
         x1, y1, x2, y2 = detection.bbox
-        color = (0, 0, 255) if alarm.is_alarm else (0, 180, 0)
+        if assessment.status == "ignored":
+            color = (120, 120, 120)
+        else:
+            color = (0, 0, 255) if assessment.is_abnormal else (0, 180, 0)
         cv2.rectangle(output, (x1, y1), (x2, y2), color, 2)
-        label = f"{detection.label} {detection.confidence:.2f}"
+        label = f"{detection.label} {assessment.status} {detection.confidence:.2f}"
         cv2.putText(output, label, (x1, max(20, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
 
-    status = "ALARM: suspected sleeping" if alarm.is_alarm else "normal"
+    labels = ", ".join(alarm.abnormal_labels)
+    if alarm.is_alarm:
+        status = f"ALARM: {alarm.abnormal_count} abnormal"
+        if labels:
+            status = f"{status} - {labels}"
+    elif alarm.suspicious:
+        status = f"suspicious: {alarm.abnormal_count} abnormal"
+        if labels:
+            status = f"{status} - {labels}"
+    else:
+        status = "normal"
     status_color = (0, 0, 255) if alarm.is_alarm else (0, 180, 0)
     cv2.putText(output, status, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_color, 2)
     cv2.putText(
@@ -62,6 +76,8 @@ def append_alarm(
     timestamp_ms: int,
     reason: str,
     duration: float,
+    abnormal_count: int,
+    abnormal_labels: tuple[str, ...],
     image_path: Path,
 ) -> None:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,13 +85,33 @@ def append_alarm(
     with csv_path.open("a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if new_file:
-            writer.writerow(["frame_id", "timestamp_ms", "reason", "duration_seconds", "image_path"])
-        writer.writerow([frame_id, timestamp_ms, reason, f"{duration:.2f}", str(image_path)])
+            writer.writerow(
+                [
+                    "frame_id",
+                    "timestamp_ms",
+                    "reason",
+                    "duration_seconds",
+                    "abnormal_count",
+                    "abnormal_labels",
+                    "image_path",
+                ]
+            )
+        writer.writerow(
+            [
+                frame_id,
+                timestamp_ms,
+                reason,
+                f"{duration:.2f}",
+                abnormal_count,
+                "|".join(abnormal_labels),
+                str(image_path),
+            ]
+        )
 
 
 def run_backend(host: str, port: int, model: str, alarm_seconds: float, output_dir: Path) -> None:
     detector = YoloDetector(model_path=model)
-    analyzer = SleepAnalyzer(threshold_seconds=alarm_seconds)
+    analyzer = BehaviourAnalyzer(threshold_seconds=alarm_seconds)
     csv_path = output_dir / "alarms.csv"
     last_alarm_frame = -1
     frame_count = 0
@@ -98,12 +134,12 @@ def run_backend(host: str, port: int, model: str, alarm_seconds: float, output_d
                 latency_ms = int(now * 1000) - packet.timestamp_ms
 
                 detections = detector.detect(frame)
-                alarm = analyzer.update(detections, now_seconds=now)
+                assessments, alarm = analyzer.update(detections, now_seconds=now)
 
                 frame_count += 1
                 elapsed = max(0.001, now - fps_started)
                 fps = frame_count / elapsed
-                overlay = draw_overlay(frame, detections, alarm, fps=fps, latency_ms=latency_ms)
+                overlay = draw_overlay(frame, assessments, alarm, fps=fps, latency_ms=latency_ms)
 
                 if alarm.is_alarm and packet.frame_id != last_alarm_frame:
                     output_dir.mkdir(parents=True, exist_ok=True)
@@ -115,6 +151,8 @@ def run_backend(host: str, port: int, model: str, alarm_seconds: float, output_d
                         packet.timestamp_ms,
                         alarm.reason,
                         alarm.duration_seconds,
+                        alarm.abnormal_count,
+                        alarm.abnormal_labels,
                         image_path,
                     )
                     last_alarm_frame = packet.frame_id

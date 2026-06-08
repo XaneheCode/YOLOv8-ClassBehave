@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.offline_test_images import iter_images, write_prediction_rows
+from scripts.offline_test_images import classify_behaviour_label, iter_images, write_prediction_rows
 
 
 def test_iter_images_returns_sorted_images_with_limit(tmp_path: Path):
@@ -34,10 +34,20 @@ def test_write_prediction_rows_creates_csv(tmp_path: Path):
                 "y1": "2.0",
                 "x2": "3.0",
                 "y2": "4.0",
-                "sleep_candidate": "true",
+                "behaviour_status": "abnormal",
+                "abnormal_candidate": "true",
             }
         ],
     )
 
-    assert "sample.jpg,sleep,0.9000" in csv_path.read_text(encoding="utf-8")
+    text = csv_path.read_text(encoding="utf-8")
 
+    assert "sample.jpg,sleep,0.9000" in text
+    assert "abnormal,true" in text
+
+
+def test_classify_behaviour_label_uses_course_rules():
+    assert classify_behaviour_label("sleep") == ("abnormal", True)
+    assert classify_behaviour_label("Using_phone") == ("abnormal", True)
+    assert classify_behaviour_label("upright") == ("normal", False)
+    assert classify_behaviour_label("unknown") == ("unknown", False)

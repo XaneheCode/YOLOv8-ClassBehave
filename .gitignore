@@ -6,6 +6,7 @@ __pycache__/
 .ruff_cache/
 output/
 tmp/
+dist/
 *.pt
 datasets/
 runs/

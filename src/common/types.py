@@ -24,4 +24,15 @@ class AlarmState:
     suspicious: bool
     duration_seconds: float
     reason: str
+    abnormal_count: int = 0
+    abnormal_labels: tuple[str, ...] = ()
 
+
+@dataclass(frozen=True)
+class DetectionAssessment:
+    detection: Detection
+    status: str
+    is_abnormal: bool
+    is_alarm: bool
+    reason: str
+    duration_seconds: float

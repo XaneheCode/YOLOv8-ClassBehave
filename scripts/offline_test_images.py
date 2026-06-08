@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import argparse
 import csv
+import sys
 from pathlib import Path
 
 import cv2
 from ultralytics import YOLO
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.backend.behaviour_analyzer import ABNORMAL_LABELS, NORMAL_LABELS
+
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp"}
+_ABNORMAL_LOWER = {label.lower() for label in ABNORMAL_LABELS}
+_NORMAL_LOWER = {label.lower() for label in NORMAL_LABELS}
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -33,9 +42,28 @@ def iter_images(images_dir: Path, limit: int) -> list[Path]:
     return images
 
 
+def classify_behaviour_label(label: str) -> tuple[str, bool]:
+    label_lower = label.lower()
+    if label_lower in _ABNORMAL_LOWER:
+        return "abnormal", True
+    if label_lower in _NORMAL_LOWER:
+        return "normal", False
+    return "unknown", False
+
+
 def write_prediction_rows(csv_path: Path, rows: list[dict[str, str]]) -> None:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = ["image", "label", "confidence", "x1", "y1", "x2", "y2", "sleep_candidate"]
+    fieldnames = [
+        "image",
+        "label",
+        "confidence",
+        "x1",
+        "y1",
+        "x2",
+        "y2",
+        "behaviour_status",
+        "abnormal_candidate",
+    ]
     with csv_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -67,7 +95,8 @@ def main() -> None:
                     "y1": "",
                     "x2": "",
                     "y2": "",
-                    "sleep_candidate": "false",
+                    "behaviour_status": "",
+                    "abnormal_candidate": "false",
                 }
             )
             continue
@@ -77,6 +106,7 @@ def main() -> None:
             label = str(result.names.get(cls_id, cls_id))
             confidence = float(box.conf.item())
             x1, y1, x2, y2 = [float(v) for v in box.xyxy[0].tolist()]
+            behaviour_status, abnormal_candidate = classify_behaviour_label(label)
             rows.append(
                 {
                     "image": image_path.name,
@@ -86,7 +116,8 @@ def main() -> None:
                     "y1": f"{y1:.1f}",
                     "x2": f"{x2:.1f}",
                     "y2": f"{y2:.1f}",
-                    "sleep_candidate": str(label.lower() in {"sleep", "desk_sleep", "head_down", "lying"}).lower(),
+                    "behaviour_status": behaviour_status,
+                    "abnormal_candidate": str(abnormal_candidate).lower(),
                 }
             )
 
@@ -100,4 +131,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
