@@ -12,6 +12,8 @@
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip config --site set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+.\.venv\Scripts\python.exe -m pip config --site set global.timeout 120
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
