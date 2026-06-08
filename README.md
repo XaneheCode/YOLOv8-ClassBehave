@@ -41,3 +41,13 @@ python -m venv .venv
 4. `output/alarms/alarms.csv` 保存报警记录。
 5. `output/alarms/*.jpg` 保存报警截图。
 
+## 单机烟测
+
+在没有第二台笔记本时，可以先在同一台电脑上完成闭环测试：
+
+```powershell
+.\.venv\Scripts\python.exe -m src.backend.app --host 127.0.0.1 --port 5001 --model yolov8n.pt
+.\.venv\Scripts\python.exe -m src.frontend.camera_client --host 127.0.0.1 --port 5001 --camera 0
+```
+
+正常坐姿应保持 normal 状态。趴桌姿态持续超过 3 秒后，应出现报警提示，并在 `output/alarms` 下生成报警记录。
