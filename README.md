@@ -29,6 +29,12 @@
 .\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model yolov8n.pt
 ```
 
+如果已经完成课堂行为数据集训练，建议改用自定义模型：
+
+```powershell
+.\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model output\training\student_sleep_yolov8n_e3\weights\best.pt
+```
+
 记录后端笔记本的无线网卡 IPv4 地址，例如 `192.168.1.20`。
 
 ## 前端启动
