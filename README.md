@@ -2,19 +2,23 @@
 
 ## 运行环境
 
-- Python 3.10+
+- Python 3.12。不要使用 Python 3.14 创建 `.venv`，否则 NumPy/OpenCV 的二进制包可能不兼容。
 - 两台笔记本位于同一无线局域网
 - 前端笔记本连接摄像头
 - 后端笔记本安装依赖并运行检测端
 
 ## 安装依赖
 
+推荐直接运行环境脚本。脚本会优先寻找 Python 3.12，并把 pip 源设置为清华源：
+
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip config --site set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-.\.venv\Scripts\python.exe -m pip config --site set global.timeout 120
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\scripts\setup_env.ps1
+```
+
+如果脚本找不到 Python 3.12，可以手动指定解释器路径：
+
+```powershell
+.\scripts\setup_env.ps1 -Python C:\Path\To\Python312\python.exe
 ```
 
 ## 后端启动
