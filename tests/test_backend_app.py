@@ -2,7 +2,7 @@ import csv
 
 import numpy as np
 
-from src.backend.app import append_alarm, build_arg_parser, draw_overlay
+from src.backend.app import append_alarm, behaviour_counts, build_arg_parser, draw_overlay, frame_status_text
 from src.common.types import AlarmState, Detection, DetectionAssessment
 
 
@@ -10,6 +10,54 @@ def test_backend_parser_defaults_to_yolov8_six_class_model():
     args = build_arg_parser().parse_args([])
 
     assert args.model == "models/classroom_behaviour_6cls.pt"
+
+
+def test_behaviour_counts_uses_yolov8_chinese_labels():
+    assessments = [
+        DetectionAssessment(
+            detection=Detection(label="Sleeping", confidence=0.91, bbox=(10, 10, 50, 80)),
+            status="abnormal",
+            is_abnormal=True,
+            is_alarm=True,
+            reason="Sleeping",
+            duration_seconds=3.1,
+        ),
+        DetectionAssessment(
+            detection=Detection(label="Writing", confidence=0.88, bbox=(70, 10, 120, 100)),
+            status="normal",
+            is_abnormal=False,
+            is_alarm=False,
+            reason="Writing",
+            duration_seconds=0.0,
+        ),
+        DetectionAssessment(
+            detection=Detection(label="Writing", confidence=0.77, bbox=(20, 20, 70, 90)),
+            status="normal",
+            is_abnormal=False,
+            is_alarm=False,
+            reason="Writing",
+            duration_seconds=0.0,
+        ),
+    ]
+
+    counts = behaviour_counts(assessments)
+
+    assert counts["睡觉"] == 1
+    assert counts["写字"] == 2
+    assert counts["举手"] == 0
+
+
+def test_frame_status_text_keeps_alarm_frame_level_only():
+    alarm = AlarmState(
+        is_alarm=True,
+        suspicious=True,
+        duration_seconds=3.1,
+        reason="multi_behaviour_abnormal",
+        abnormal_count=1,
+        abnormal_labels=("Sleeping",),
+    )
+
+    assert frame_status_text(alarm) == "ALARM: 1 abnormal - Sleeping"
 
 
 def test_append_alarm_creates_csv_with_header(tmp_path):

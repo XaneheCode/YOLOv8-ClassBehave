@@ -9,7 +9,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from src.backend.behaviour_analyzer import BehaviourAnalyzer
+from src.backend.behaviour_analyzer import LABEL_DISPLAY_NAMES, BehaviourAnalyzer, display_label
 from src.backend.detector import YoloDetector
 from src.common.image_codec import decode_jpeg
 from src.common.protocol import recv_packet
@@ -27,6 +27,27 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--alarm-seconds", type=float, default=3.0)
     parser.add_argument("--output-dir", default="output/alarms")
     return parser
+
+
+def behaviour_counts(assessments: list[DetectionAssessment]) -> dict[str, int]:
+    counts = {display: 0 for display in LABEL_DISPLAY_NAMES.values()}
+    for assessment in assessments:
+        if assessment.status == "ignored":
+            continue
+        label = display_label(assessment.detection.label)
+        counts[label] = counts.get(label, 0) + 1
+    return counts
+
+
+def frame_status_text(alarm: AlarmState) -> str:
+    labels = ", ".join(alarm.abnormal_labels)
+    if alarm.is_alarm:
+        status = f"ALARM: {alarm.abnormal_count} abnormal"
+        return f"{status} - {labels}" if labels else status
+    if alarm.suspicious:
+        status = f"suspicious: {alarm.abnormal_count} abnormal"
+        return f"{status} - {labels}" if labels else status
+    return "normal"
 
 
 def draw_overlay(
@@ -48,17 +69,7 @@ def draw_overlay(
         label = f"{detection.label} {assessment.status} {detection.confidence:.2f}"
         cv2.putText(output, label, (x1, max(20, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
 
-    labels = ", ".join(alarm.abnormal_labels)
-    if alarm.is_alarm:
-        status = f"ALARM: {alarm.abnormal_count} abnormal"
-        if labels:
-            status = f"{status} - {labels}"
-    elif alarm.suspicious:
-        status = f"suspicious: {alarm.abnormal_count} abnormal"
-        if labels:
-            status = f"{status} - {labels}"
-    else:
-        status = "normal"
+    status = frame_status_text(alarm)
     status_color = (0, 0, 255) if alarm.is_alarm else (0, 180, 0)
     cv2.putText(output, status, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_color, 2)
     cv2.putText(
