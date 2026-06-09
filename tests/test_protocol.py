@@ -1,9 +1,20 @@
-import socket
-import threading
-
 import pytest
 
 from src.common.protocol import HEADER_SIZE, encode_packet, parse_header, recv_packet
+
+
+class ChunkedConnection:
+    def __init__(self, chunks):
+        self.chunks = list(chunks)
+
+    def recv(self, size):
+        if not self.chunks:
+            return b""
+        chunk = self.chunks.pop(0)
+        if len(chunk) > size:
+            self.chunks.insert(0, chunk[size:])
+            return chunk[:size]
+        return chunk
 
 
 def test_encode_parse_header_round_trip():
@@ -27,25 +38,10 @@ def test_parse_header_rejects_invalid_magic():
 
 
 def test_recv_packet_handles_split_tcp_chunks():
-    sender, receiver = socket.socketpair()
     packet = encode_packet(frame_id=3, timestamp_ms=99, image_bytes=b"abcdef")
+    receiver = ChunkedConnection([packet[:2], packet[2:9], packet[9:]])
 
-    def write_chunks():
-        try:
-            sender.sendall(packet[:2])
-            sender.sendall(packet[2:9])
-            sender.sendall(packet[9:])
-        finally:
-            sender.close()
-
-    writer = threading.Thread(target=write_chunks)
-    writer.start()
-
-    try:
-        result = recv_packet(receiver)
-    finally:
-        receiver.close()
-        writer.join(timeout=2)
+    result = recv_packet(receiver)
 
     assert result.frame_id == 3
     assert result.timestamp_ms == 99

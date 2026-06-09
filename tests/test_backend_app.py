@@ -2,8 +2,14 @@ import csv
 
 import numpy as np
 
-from src.backend.app import append_alarm, draw_overlay
+from src.backend.app import append_alarm, build_arg_parser, draw_overlay
 from src.common.types import AlarmState, Detection, DetectionAssessment
+
+
+def test_backend_parser_defaults_to_e20_behaviour_model():
+    args = build_arg_parser().parse_args([])
+
+    assert args.model == "output/training/student_behaviour_yolov8n_e20/weights/best.pt"
 
 
 def test_append_alarm_creates_csv_with_header(tmp_path):

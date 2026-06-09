@@ -1,7 +1,7 @@
 param(
     [string]$OutputDir = "dist",
     [string]$PackageName = "backend-student-sleep-server",
-    [string]$ModelPath = "output\training\student_behaviour_yolov8n_e3\weights\best.pt"
+    [string]$ModelPath = "output\training\student_behaviour_yolov8n_e20\weights\best.pt"
 )
 
 $ErrorActionPreference = "Stop"

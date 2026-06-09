@@ -26,7 +26,7 @@
 验收和成果展示时，后端默认使用训练后的 12 类课堂行为模型：
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model output\training\student_behaviour_yolov8n_e3\weights\best.pt
+.\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001
 ```
 
 如果只想验证基础环境，也可以临时使用通用模型：
@@ -77,7 +77,7 @@
 在没有第二台笔记本时，可以先在同一台电脑上完成闭环测试：
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.backend.app --host 127.0.0.1 --port 5001 --model output\training\student_behaviour_yolov8n_e3\weights\best.pt
+.\.venv\Scripts\python.exe -m src.backend.app --host 127.0.0.1 --port 5001
 .\.venv\Scripts\python.exe -m src.frontend.camera_client --host 127.0.0.1 --port 5001 --camera 0
 ```
 
@@ -100,20 +100,26 @@ datasets/Student Behaviour Detection.v6i.yolov8
 训练 12 类课堂行为模型：
 
 ```powershell
-.\.venv\Scripts\yolo.exe detect train data=tmp\student-behaviour-detection-abs.yaml model=yolov8n.pt epochs=3 imgsz=320 batch=8 device=cpu workers=0 project=output\training name=student_behaviour_yolov8n_e3 exist_ok=True
+.\.venv\Scripts\yolo.exe detect train data=tmp\student-behaviour-detection-abs.yaml model=yolov8n.pt epochs=20 imgsz=640 batch=8 device=cpu workers=0 project=output\training name=student_behaviour_yolov8n_e20 exist_ok=True
 ```
 
-如果训练结果被 Ultralytics 保存到 `runs/detect/output/training/student_behaviour_yolov8n_e3`，可以直接把该目录复制到 `output/training/student_behaviour_yolov8n_e3`。
+如果训练结果被 Ultralytics 保存到 `runs/detect/output/training/student_behaviour_yolov8n_e20`，可以直接把该目录复制到 `output/training/student_behaviour_yolov8n_e20`。
+
+本轮 e20/imgsz640 验证集指标：
+
+| Precision | Recall | mAP50 | mAP50-95 |
+| ---: | ---: | ---: | ---: |
+| 0.739 | 0.685 | 0.709 | 0.466 |
 
 使用 `test/images` 离线测试：
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\offline_test_images.py --dataset "datasets\Student Behaviour Detection.v6i.yolov8" --model output\training\student_behaviour_yolov8n_e3\weights\best.pt --output-dir output\offline_test\student-behaviour-custom-e3 --limit 0 --conf 0.25
+.\.venv\Scripts\python.exe scripts\offline_test_images.py --dataset "datasets\Student Behaviour Detection.v6i.yolov8" --model output\training\student_behaviour_yolov8n_e20\weights\best.pt --output-dir output\offline_test\student-behaviour-custom-e20 --limit 0 --conf 0.25
 ```
 
 本轮训练和测试记录见：
 
-- `docs/course-evidence/student-behaviour-custom-e3-test.md`
+- `docs/course-evidence/student-behaviour-custom-e20-test.md`
 
 ## 后端打包
 
@@ -133,7 +139,7 @@ datasets/Student Behaviour Detection.v6i.yolov8
 默认打包模型：
 
 ```text
-output/training/student_behaviour_yolov8n_e3/weights/best.pt
+output/training/student_behaviour_yolov8n_e20/weights/best.pt
 ```
 
 ## 可选：下载旧三分类数据集
