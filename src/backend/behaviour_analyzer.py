@@ -3,11 +3,24 @@ from __future__ import annotations
 from src.common.types import AlarmState, Detection, DetectionAssessment
 
 
-ABNORMAL_LABELS = {"Using_phone", "phone", "sleep", "bend", "bow_head", "turn_head"}
-NORMAL_LABELS = {"upright", "reading", "writing", "book", "hand-raising", "raise_head"}
+ABNORMAL_LABELS = {"Useing-Phone", "Head-down", "Sleeping"}
+NORMAL_LABELS = {"Hand-raise", "Reading", "Writing"}
+LABEL_DISPLAY_NAMES = {
+    "Hand-raise": "举手",
+    "Reading": "看书",
+    "Writing": "写字",
+    "Useing-Phone": "使用手机",
+    "Head-down": "低头",
+    "Sleeping": "睡觉",
+}
 
 _ABNORMAL_BY_LOWER = {label.lower(): label for label in ABNORMAL_LABELS}
 _NORMAL_BY_LOWER = {label.lower(): label for label in NORMAL_LABELS}
+_DISPLAY_BY_LOWER = {label.lower(): display for label, display in LABEL_DISPLAY_NAMES.items()}
+
+
+def display_label(label: str) -> str:
+    return _DISPLAY_BY_LOWER.get(label.lower(), label)
 
 
 class BehaviourAnalyzer:

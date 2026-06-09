@@ -16,11 +16,14 @@ from src.common.protocol import recv_packet
 from src.common.types import AlarmState, DetectionAssessment
 
 
+DEFAULT_MODEL_PATH = "models/classroom_behaviour_6cls.pt"
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Backend receiver and YOLO alarm display")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=5001)
-    parser.add_argument("--model", default="output/training/student_behaviour_yolov8n_e20/weights/best.pt")
+    parser.add_argument("--model", default=DEFAULT_MODEL_PATH)
     parser.add_argument("--alarm-seconds", type=float, default=3.0)
     parser.add_argument("--output-dir", default="output/alarms")
     return parser

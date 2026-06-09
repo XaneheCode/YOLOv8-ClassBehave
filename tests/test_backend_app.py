@@ -6,10 +6,10 @@ from src.backend.app import append_alarm, build_arg_parser, draw_overlay
 from src.common.types import AlarmState, Detection, DetectionAssessment
 
 
-def test_backend_parser_defaults_to_e20_behaviour_model():
+def test_backend_parser_defaults_to_yolov8_six_class_model():
     args = build_arg_parser().parse_args([])
 
-    assert args.model == "output/training/student_behaviour_yolov8n_e20/weights/best.pt"
+    assert args.model == "models/classroom_behaviour_6cls.pt"
 
 
 def test_append_alarm_creates_csv_with_header(tmp_path):
