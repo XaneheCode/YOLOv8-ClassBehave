@@ -28,7 +28,7 @@ def test_write_prediction_rows_creates_csv(tmp_path: Path):
         [
             {
                 "image": "sample.jpg",
-                "label": "sleep",
+                "label": "Sleeping",
                 "confidence": "0.9000",
                 "x1": "1.0",
                 "y1": "2.0",
@@ -42,12 +42,12 @@ def test_write_prediction_rows_creates_csv(tmp_path: Path):
 
     text = csv_path.read_text(encoding="utf-8")
 
-    assert "sample.jpg,sleep,0.9000" in text
+    assert "sample.jpg,Sleeping,0.9000" in text
     assert "abnormal,true" in text
 
 
 def test_classify_behaviour_label_uses_course_rules():
-    assert classify_behaviour_label("sleep") == ("abnormal", True)
-    assert classify_behaviour_label("Using_phone") == ("abnormal", True)
-    assert classify_behaviour_label("upright") == ("normal", False)
+    assert classify_behaviour_label("Sleeping") == ("abnormal", True)
+    assert classify_behaviour_label("Useing-Phone") == ("abnormal", True)
+    assert classify_behaviour_label("Writing") == ("normal", False)
     assert classify_behaviour_label("unknown") == ("unknown", False)

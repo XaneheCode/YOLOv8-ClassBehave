@@ -1,4 +1,4 @@
-from src.backend.behaviour_analyzer import ABNORMAL_LABELS, NORMAL_LABELS, BehaviourAnalyzer
+from src.backend.behaviour_analyzer import ABNORMAL_LABELS, NORMAL_LABELS, BehaviourAnalyzer, display_label
 from src.common.types import Detection
 
 
@@ -82,3 +82,8 @@ def test_low_confidence_abnormal_detection_is_ignored():
 def test_declared_label_sets_match_yolov8_six_class_model():
     assert ABNORMAL_LABELS == {"Useing-Phone", "Head-down", "Sleeping"}
     assert NORMAL_LABELS == {"Hand-raise", "Reading", "Writing"}
+
+
+def test_display_label_maps_known_labels_and_preserves_unknown_labels():
+    assert display_label("Sleeping") == "睡觉"
+    assert display_label("Not-A-Class") == "Not-A-Class"

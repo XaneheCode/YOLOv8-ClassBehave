@@ -23,7 +23,7 @@ def test_append_alarm_creates_csv_with_header(tmp_path):
         reason="multi_behaviour_abnormal",
         duration=3.25,
         abnormal_count=2,
-        abnormal_labels=("sleep", "phone"),
+        abnormal_labels=("Sleeping", "Useing-Phone"),
         image_path=image_path,
     )
 
@@ -39,18 +39,26 @@ def test_append_alarm_creates_csv_with_header(tmp_path):
         "abnormal_labels",
         "image_path",
     ]
-    assert rows[1] == ["12", "123456", "multi_behaviour_abnormal", "3.25", "2", "sleep|phone", str(image_path)]
+    assert rows[1] == [
+        "12",
+        "123456",
+        "multi_behaviour_abnormal",
+        "3.25",
+        "2",
+        "Sleeping|Useing-Phone",
+        str(image_path),
+    ]
 
 
 def test_draw_overlay_keeps_frame_shape():
     frame = np.zeros((120, 160, 3), dtype=np.uint8)
     assessments = [
         DetectionAssessment(
-            detection=Detection(label="sleep", confidence=0.8, bbox=(10, 15, 80, 100)),
+            detection=Detection(label="Sleeping", confidence=0.8, bbox=(10, 15, 80, 100)),
             status="abnormal",
             is_abnormal=True,
             is_alarm=True,
-            reason="sleep",
+            reason="Sleeping",
             duration_seconds=3.1,
         )
     ]
@@ -60,7 +68,7 @@ def test_draw_overlay_keeps_frame_shape():
         duration_seconds=3.1,
         reason="multi_behaviour_abnormal",
         abnormal_count=1,
-        abnormal_labels=("sleep",),
+        abnormal_labels=("Sleeping",),
     )
 
     output = draw_overlay(frame, assessments, alarm, fps=8.5, latency_ms=32)
@@ -74,19 +82,19 @@ def test_draw_overlay_colours_each_detection_by_its_own_status():
     frame = np.zeros((120, 160, 3), dtype=np.uint8)
     assessments = [
         DetectionAssessment(
-            detection=Detection(label="sleep", confidence=0.91, bbox=(10, 10, 50, 80)),
+            detection=Detection(label="Sleeping", confidence=0.91, bbox=(10, 10, 50, 80)),
             status="abnormal",
             is_abnormal=True,
             is_alarm=True,
-            reason="sleep",
+            reason="Sleeping",
             duration_seconds=3.1,
         ),
         DetectionAssessment(
-            detection=Detection(label="upright", confidence=0.88, bbox=(70, 10, 120, 100)),
+            detection=Detection(label="Hand-raise", confidence=0.88, bbox=(70, 10, 120, 100)),
             status="normal",
             is_abnormal=False,
             is_alarm=False,
-            reason="upright",
+            reason="Hand-raise",
             duration_seconds=0.0,
         ),
     ]
@@ -96,7 +104,7 @@ def test_draw_overlay_colours_each_detection_by_its_own_status():
         duration_seconds=3.1,
         reason="multi_behaviour_abnormal",
         abnormal_count=1,
-        abnormal_labels=("sleep",),
+        abnormal_labels=("Sleeping",),
     )
 
     output = draw_overlay(frame, assessments, alarm, fps=8.5, latency_ms=32)
