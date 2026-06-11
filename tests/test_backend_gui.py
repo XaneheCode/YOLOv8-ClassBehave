@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -153,6 +154,31 @@ class FakeServerSocket(FakeSocket):
         return self.conn, ("127.0.0.1", 61234)
 
 
+class ControlledServerSocket(FakeSocket):
+    def __init__(self, accepts):
+        super().__init__()
+        self.accepts = list(accepts)
+        self.accept_calls = 0
+
+    def setsockopt(self, level, optname, value):
+        pass
+
+    def bind(self, address):
+        self.address = address
+
+    def listen(self, backlog):
+        self.backlog = backlog
+
+    def accept(self):
+        self.accept_calls += 1
+        item = self.accepts.pop(0)
+        if callable(item):
+            item = item()
+        if isinstance(item, BaseException):
+            raise item
+        return item, ("127.0.0.1", 61234)
+
+
 def test_worker_reports_protocol_value_error_without_idle_status(monkeypatch):
     _app()
     server = FakeServerSocket()
@@ -180,6 +206,119 @@ def test_worker_reports_protocol_value_error_without_idle_status(monkeypatch):
     assert statuses[-1] != "未监听"
     assert server.closed is True
     assert server.conn.closed is True
+
+
+def test_worker_skips_packet_when_stopped_during_receive(monkeypatch):
+    _app()
+    server = FakeServerSocket()
+    worker = BackendReceiverWorker(
+        host="0.0.0.0",
+        port=5001,
+        model=DEFAULT_MODEL_PATH,
+        alarm_seconds=3.0,
+        output_dir="output/alarms",
+    )
+
+    def fake_recv_packet(conn):
+        worker._running = False
+        return FramePacket(frame_id=7, timestamp_ms=123456, image_bytes=b"jpeg")
+
+    decode_calls = []
+    detect_calls = []
+
+    class RecordingDetector:
+        def __init__(self, model_path):
+            self.model_path = model_path
+
+        def detect(self, frame):
+            detect_calls.append(frame)
+            return []
+
+    monkeypatch.setattr("src.backend.gui_app.YoloDetector", RecordingDetector)
+    monkeypatch.setattr("src.backend.gui_app.socket.socket", lambda *args, **kwargs: server)
+    monkeypatch.setattr("src.backend.gui_app.recv_packet", fake_recv_packet)
+    monkeypatch.setattr(
+        "src.backend.gui_app.decode_jpeg",
+        lambda data: decode_calls.append(data) or np.zeros((20, 20, 3), dtype=np.uint8),
+    )
+
+    worker.run()
+
+    assert decode_calls == []
+    assert detect_calls == []
+
+
+def test_worker_clean_disconnect_returns_to_waiting_without_error(monkeypatch):
+    _app()
+    first_conn = FakeSocket()
+    worker = BackendReceiverWorker(
+        host="0.0.0.0",
+        port=5001,
+        model=DEFAULT_MODEL_PATH,
+        alarm_seconds=3.0,
+        output_dir="output/alarms",
+    )
+
+    def stop_accepting():
+        worker._running = False
+        return OSError("server stopped")
+
+    server = ControlledServerSocket([first_conn, stop_accepting])
+    monkeypatch.setattr("src.backend.gui_app.YoloDetector", FakeDetector)
+    monkeypatch.setattr("src.backend.gui_app.socket.socket", lambda *args, **kwargs: server)
+    monkeypatch.setattr(
+        "src.backend.gui_app.recv_packet",
+        lambda conn: (_ for _ in ()).throw(ConnectionError("Socket closed before enough bytes were received")),
+    )
+    errors = []
+    statuses = []
+    worker.error_occurred.connect(errors.append)
+    worker.status_changed.connect(statuses.append)
+
+    worker.run()
+
+    assert errors == []
+    assert any("前端已断开" in status for status in statuses)
+    assert server.accept_calls == 2
+    assert first_conn.closed is True
+
+
+def test_worker_skips_bad_frame_and_keeps_receiving(monkeypatch):
+    _app()
+    server = FakeServerSocket()
+    worker = BackendReceiverWorker(
+        host="0.0.0.0",
+        port=5001,
+        model=DEFAULT_MODEL_PATH,
+        alarm_seconds=3.0,
+        output_dir="output/alarms",
+    )
+    recv_calls = []
+
+    def fake_recv_packet(conn):
+        recv_calls.append(conn)
+        if len(recv_calls) == 1:
+            return FramePacket(frame_id=1, timestamp_ms=123456, image_bytes=b"bad")
+        worker._running = False
+        raise ConnectionError("Socket closed before enough bytes were received")
+
+    logs = []
+    errors = []
+    monkeypatch.setattr("src.backend.gui_app.YoloDetector", FakeDetector)
+    monkeypatch.setattr("src.backend.gui_app.socket.socket", lambda *args, **kwargs: server)
+    monkeypatch.setattr("src.backend.gui_app.recv_packet", fake_recv_packet)
+    monkeypatch.setattr(
+        "src.backend.gui_app.decode_jpeg",
+        lambda data: (_ for _ in ()).throw(ValueError("failed to decode JPEG frame")),
+    )
+    worker.log_ready.connect(logs.append)
+    worker.error_occurred.connect(errors.append)
+
+    worker.run()
+
+    assert len(recv_calls) == 2
+    assert any("帧处理失败" in log and "failed to decode JPEG frame" in log for log in logs)
+    assert not any("处理画面失败" in error for error in errors)
 
 
 class FakeAlarmAnalyzer:
@@ -216,10 +355,15 @@ def test_worker_does_not_log_or_append_alarm_when_screenshot_save_fails(monkeypa
         alarm_seconds=3.0,
         output_dir=tmp_path,
     )
+    recv_count = 0
 
     def fake_recv_packet(conn):
+        nonlocal recv_count
+        recv_count += 1
+        if recv_count == 1:
+            return FramePacket(frame_id=7, timestamp_ms=123456, image_bytes=b"jpeg")
         worker._running = False
-        return FramePacket(frame_id=7, timestamp_ms=123456, image_bytes=b"jpeg")
+        raise ConnectionError("Socket closed before enough bytes were received")
 
     appended = []
     logs = []
@@ -242,4 +386,54 @@ def test_worker_does_not_log_or_append_alarm_when_screenshot_save_fails(monkeypa
 
     assert any("报警截图保存失败" in error for error in errors)
     assert appended == []
+    assert logs == []
+
+
+def test_worker_removes_saved_screenshot_when_alarm_csv_append_fails(monkeypatch, tmp_path):
+    _app()
+    server = FakeServerSocket()
+    worker = BackendReceiverWorker(
+        host="0.0.0.0",
+        port=5001,
+        model=DEFAULT_MODEL_PATH,
+        alarm_seconds=3.0,
+        output_dir=tmp_path,
+    )
+    recv_count = 0
+
+    def fake_recv_packet(conn):
+        nonlocal recv_count
+        recv_count += 1
+        if recv_count == 1:
+            return FramePacket(frame_id=7, timestamp_ms=123456, image_bytes=b"jpeg")
+        worker._running = False
+        raise ConnectionError("Socket closed before enough bytes were received")
+
+    def fake_imwrite(path, image):
+        Path(path).write_bytes(b"image")
+        return True
+
+    logs = []
+    errors = []
+    monkeypatch.setattr("src.backend.gui_app.YoloDetector", FakeDetector)
+    monkeypatch.setattr("src.backend.gui_app.BehaviourAnalyzer", FakeAlarmAnalyzer)
+    monkeypatch.setattr("src.backend.gui_app.socket.socket", lambda *args, **kwargs: server)
+    monkeypatch.setattr("src.backend.gui_app.recv_packet", fake_recv_packet)
+    monkeypatch.setattr(
+        "src.backend.gui_app.decode_jpeg",
+        lambda data: np.zeros((20, 20, 3), dtype=np.uint8),
+    )
+    monkeypatch.setattr("src.backend.gui_app.draw_overlay", lambda frame, assessments, alarm, fps, latency_ms: frame)
+    monkeypatch.setattr("src.backend.gui_app.cv2.imwrite", fake_imwrite)
+    monkeypatch.setattr(
+        "src.backend.gui_app.append_alarm",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    worker.error_occurred.connect(errors.append)
+    worker.log_ready.connect(logs.append)
+
+    worker.run()
+
+    assert list(tmp_path.glob("*.jpg")) == []
+    assert any("报警记录写入失败" in error and "disk full" in error for error in errors)
     assert logs == []

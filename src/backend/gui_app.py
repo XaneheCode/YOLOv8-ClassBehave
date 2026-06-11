@@ -111,70 +111,82 @@ class BackendReceiverWorker(QtCore.QThread):
             server.listen(1)
             self.status_changed.emit(f"监听中 {self.host}:{self.port}")
 
-            conn, addr = self._accept_connection(server)
-            if conn is None:
-                return
-            conn.settimeout(None)
-            with self._socket_lock:
-                self._conn = conn
-            self.status_changed.emit(f"已连接 {addr[0]}:{addr[1]}")
-
             while self._running:
                 try:
-                    packet = recv_packet(conn)
-                except ValueError as exc:
-                    if self._running:
-                        had_error = True
-                        self.error_occurred.emit(f"数据包错误：{exc}")
-                    break
-                except (ConnectionError, OSError) as exc:
-                    if self._running:
-                        had_error = True
-                        self.error_occurred.emit(f"接收画面失败：{exc}")
-                    break
+                    conn, addr = self._accept_connection(server)
+                    if conn is None:
+                        break
+                    conn.settimeout(None)
+                    with self._socket_lock:
+                        self._conn = conn
+                    self.status_changed.emit(f"已连接 {addr[0]}:{addr[1]}")
 
-                try:
-                    frame = decode_jpeg(packet.image_bytes)
-                    now = time.time()
-                    latency_ms = int(now * 1000) - packet.timestamp_ms
-                    detections = detector.detect(frame)
-                    assessments, alarm = analyzer.update(detections, now_seconds=now)
+                    while self._running:
+                        try:
+                            packet = recv_packet(conn)
+                        except ValueError as exc:
+                            if self._running:
+                                had_error = True
+                                self.error_occurred.emit(f"数据包错误：{exc}")
+                                self._running = False
+                            break
+                        except ConnectionError:
+                            if self._running:
+                                self.status_changed.emit("前端已断开，等待连接")
+                            break
+                        except OSError as exc:
+                            if self._running:
+                                had_error = True
+                                self.error_occurred.emit(f"接收画面失败：{exc}")
+                                self._running = False
+                            break
 
-                    frame_count += 1
-                    elapsed = max(0.001, now - fps_started)
-                    fps = frame_count / elapsed
-                    overlay = draw_overlay(frame, assessments, alarm, fps=fps, latency_ms=latency_ms)
+                        if not self._running:
+                            break
 
-                    if alarm.is_alarm and packet.frame_id != last_alarm_frame:
-                        self.output_dir.mkdir(parents=True, exist_ok=True)
-                        image_path = self.output_dir / f"alarm_{packet.frame_id}_{packet.timestamp_ms}.jpg"
-                        saved = cv2.imwrite(str(image_path), overlay)
-                        if not saved:
-                            had_error = True
-                            self.error_occurred.emit(f"报警截图保存失败：{image_path}")
-                        else:
-                            append_alarm(
-                                csv_path,
-                                packet.frame_id,
-                                packet.timestamp_ms,
-                                alarm.reason,
-                                alarm.duration_seconds,
-                                alarm.abnormal_count,
-                                alarm.abnormal_labels,
-                                image_path,
-                            )
-                            last_alarm_frame = packet.frame_id
-                            self.log_ready.emit(f"已保存报警：{image_path}")
+                        try:
+                            frame = decode_jpeg(packet.image_bytes)
+                            now = time.time()
+                            latency_ms = int(now * 1000) - packet.timestamp_ms
+                            detections = detector.detect(frame)
+                            assessments, alarm = analyzer.update(detections, now_seconds=now)
 
-                    height, width = frame.shape[:2]
-                    self.frame_ready.emit(cv_frame_to_qimage(overlay))
-                    self.metrics_ready.emit(fps, f"{width}x{height}", frame_count, latency_ms)
-                    self.counts_ready.emit(behaviour_counts(assessments))
-                    self.alarm_changed.emit(frame_status_text(alarm), alarm.is_alarm)
-                except Exception as exc:
-                    had_error = True
-                    self.error_occurred.emit(f"处理画面失败：{exc}")
-                    break
+                            frame_count += 1
+                            elapsed = max(0.001, now - fps_started)
+                            fps = frame_count / elapsed
+                            overlay = draw_overlay(frame, assessments, alarm, fps=fps, latency_ms=latency_ms)
+
+                            if alarm.is_alarm and packet.frame_id != last_alarm_frame:
+                                image_path = self.output_dir / f"alarm_{packet.frame_id}_{packet.timestamp_ms}.jpg"
+                                if self._save_alarm(
+                                    csv_path,
+                                    packet.frame_id,
+                                    packet.timestamp_ms,
+                                    alarm.reason,
+                                    alarm.duration_seconds,
+                                    alarm.abnormal_count,
+                                    alarm.abnormal_labels,
+                                    image_path,
+                                    overlay,
+                                ):
+                                    last_alarm_frame = packet.frame_id
+                                else:
+                                    had_error = True
+
+                            height, width = frame.shape[:2]
+                            self.frame_ready.emit(cv_frame_to_qimage(overlay))
+                            self.metrics_ready.emit(fps, f"{width}x{height}", frame_count, latency_ms)
+                            self.counts_ready.emit(behaviour_counts(assessments))
+                            self.alarm_changed.emit(frame_status_text(alarm), alarm.is_alarm)
+                        except Exception as exc:
+                            self.log_ready.emit(f"帧处理失败：{exc}")
+                            continue
+                finally:
+                    self._close_socket(conn)
+                    with self._socket_lock:
+                        if self._conn is conn:
+                            self._conn = None
+                    conn = None
         except OSError as exc:
             if self._running:
                 had_error = True
@@ -190,6 +202,46 @@ class BackendReceiverWorker(QtCore.QThread):
                     self._server = None
             if not had_error:
                 self.status_changed.emit("未监听")
+
+    def _save_alarm(
+        self,
+        csv_path: Path,
+        frame_id: int,
+        timestamp_ms: int,
+        reason: str,
+        duration_seconds: float,
+        abnormal_count: int,
+        abnormal_labels: tuple[str, ...],
+        image_path: Path,
+        image,
+    ) -> bool:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        saved = cv2.imwrite(str(image_path), image)
+        if not saved:
+            self.error_occurred.emit(f"报警截图保存失败：{image_path}")
+            return False
+
+        try:
+            append_alarm(
+                csv_path,
+                frame_id,
+                timestamp_ms,
+                reason,
+                duration_seconds,
+                abnormal_count,
+                abnormal_labels,
+                image_path,
+            )
+        except Exception as exc:
+            try:
+                image_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            self.error_occurred.emit(f"报警记录写入失败：{exc}")
+            return False
+
+        self.log_ready.emit(f"已保存报警：{image_path}")
+        return True
 
     def _accept_connection(self, server: socket.socket) -> tuple[socket.socket, tuple[str, int]] | tuple[None, None]:
         while self._running:
