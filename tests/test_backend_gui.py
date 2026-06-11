@@ -24,6 +24,7 @@ def test_backend_gui_defaults():
         assert window.port_spin.value() == 5001
         assert window.model_edit.text() == DEFAULT_MODEL_PATH
         assert window.alarm_spin.value() == 3.0
+        assert window.output_edit.text() == "output/alarms"
         assert "未监听" in window.status_label.text()
         assert window.stop_button.isEnabled() is False
     finally:
