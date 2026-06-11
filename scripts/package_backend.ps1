@@ -1,7 +1,7 @@
 param(
     [string]$OutputDir = "dist",
     [string]$PackageName = "backend-student-sleep-server",
-    [string]$ModelPath = "output\training\student_behaviour_yolov8n_e20\weights\best.pt"
+    [string]$ModelPath = "models\classroom_behaviour_6cls.pt"
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,7 +40,8 @@ Copy-Item -LiteralPath "src\backend" -Destination (Join-Path $packageDir "src") 
 Copy-Item -LiteralPath "src\common" -Destination (Join-Path $packageDir "src") -Recurse
 Copy-Item -LiteralPath "requirements.txt" -Destination (Join-Path $packageDir "requirements.txt")
 Copy-Item -LiteralPath "scripts\setup_env.ps1" -Destination (Join-Path $packageDir "scripts\setup_env.ps1")
-Copy-Item -LiteralPath $modelFullPath -Destination (Join-Path $packageDir "models\student_behaviour_yolov8n_best.pt")
+Copy-Item -LiteralPath "START_BACKEND_GUI.ps1" -Destination (Join-Path $packageDir "START_BACKEND_GUI.ps1")
+Copy-Item -LiteralPath $modelFullPath -Destination (Join-Path $packageDir "models\classroom_behaviour_6cls.pt")
 
 Get-ChildItem -LiteralPath $packageDir -Recurse -Directory -Filter "__pycache__" |
     Remove-Item -Recurse -Force
@@ -60,10 +61,10 @@ Get-ChildItem -LiteralPath $packageDir -Recurse -Directory -Filter "__pycache__"
 .\START_BACKEND.ps1
 ```
 
-默认监听 `0.0.0.0:5001`，加载 12 类课堂行为模型：
+默认监听 `0.0.0.0:5001`，加载 6 类课堂行为模型：
 
 ```txt
-models\student_behaviour_yolov8n_best.pt
+models\classroom_behaviour_6cls.pt
 ```
 
 异常状态框显示为红色，正常状态框显示为绿色。
@@ -73,7 +74,7 @@ models\student_behaviour_yolov8n_best.pt
 
 @'
 $ErrorActionPreference = "Stop"
-.\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model models\student_behaviour_yolov8n_best.pt
+.\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model models\classroom_behaviour_6cls.pt
 '@ | Set-Content -Encoding UTF8 (Join-Path $packageDir "START_BACKEND.ps1")
 
 Compress-Archive -Path (Join-Path $packageDir "*") -DestinationPath $zipPath -Force
