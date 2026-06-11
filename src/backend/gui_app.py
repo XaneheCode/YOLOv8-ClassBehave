@@ -122,6 +122,11 @@ class BackendReceiverWorker(QtCore.QThread):
             while self._running:
                 try:
                     packet = recv_packet(conn)
+                except ValueError as exc:
+                    if self._running:
+                        had_error = True
+                        self.error_occurred.emit(f"数据包错误：{exc}")
+                    break
                 except (ConnectionError, OSError) as exc:
                     if self._running:
                         had_error = True
@@ -143,19 +148,23 @@ class BackendReceiverWorker(QtCore.QThread):
                     if alarm.is_alarm and packet.frame_id != last_alarm_frame:
                         self.output_dir.mkdir(parents=True, exist_ok=True)
                         image_path = self.output_dir / f"alarm_{packet.frame_id}_{packet.timestamp_ms}.jpg"
-                        cv2.imwrite(str(image_path), overlay)
-                        append_alarm(
-                            csv_path,
-                            packet.frame_id,
-                            packet.timestamp_ms,
-                            alarm.reason,
-                            alarm.duration_seconds,
-                            alarm.abnormal_count,
-                            alarm.abnormal_labels,
-                            image_path,
-                        )
-                        last_alarm_frame = packet.frame_id
-                        self.log_ready.emit(f"已保存报警：{image_path}")
+                        saved = cv2.imwrite(str(image_path), overlay)
+                        if not saved:
+                            had_error = True
+                            self.error_occurred.emit(f"报警截图保存失败：{image_path}")
+                        else:
+                            append_alarm(
+                                csv_path,
+                                packet.frame_id,
+                                packet.timestamp_ms,
+                                alarm.reason,
+                                alarm.duration_seconds,
+                                alarm.abnormal_count,
+                                alarm.abnormal_labels,
+                                image_path,
+                            )
+                            last_alarm_frame = packet.frame_id
+                            self.log_ready.emit(f"已保存报警：{image_path}")
 
                     height, width = frame.shape[:2]
                     self.frame_ready.emit(cv_frame_to_qimage(overlay))
