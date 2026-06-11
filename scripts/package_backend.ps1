@@ -6,13 +6,25 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Test-IsSubPath {
+    param(
+        [Parameter(Mandatory=$true)][string]$Parent,
+        [Parameter(Mandatory=$true)][string]$Child
+    )
+    $parentFull = [System.IO.Path]::GetFullPath($Parent).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+    $childFull = [System.IO.Path]::GetFullPath($Child).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    return $childFull.Equals($parentFull.TrimEnd([System.IO.Path]::DirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase) -or $childFull.StartsWith($parentFull, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 $workspace = (Resolve-Path ".").Path
 $modelFullPath = (Resolve-Path -LiteralPath $ModelPath).Path
 $distDir = Join-Path $workspace $OutputDir
 $packageDir = Join-Path $distDir $PackageName
 $zipPath = Join-Path $distDir "$PackageName.zip"
+$readmePath = Join-Path $packageDir "README_BACKEND.md"
+$startBackendPath = Join-Path $packageDir "START_BACKEND.ps1"
 
-if (-not $modelFullPath.StartsWith($workspace, [System.StringComparison]::OrdinalIgnoreCase)) {
+if (-not (Test-IsSubPath -Parent $workspace -Child $modelFullPath)) {
     throw "Refusing to package model outside workspace: $modelFullPath"
 }
 
@@ -20,7 +32,7 @@ New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 
 if (Test-Path -LiteralPath $packageDir) {
     $resolvedPackage = (Resolve-Path -LiteralPath $packageDir).Path
-    if (-not $resolvedPackage.StartsWith($distDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+    if (-not (Test-IsSubPath -Parent $distDir -Child $resolvedPackage)) {
         throw "Refusing to remove package outside dist directory: $resolvedPackage"
     }
     Remove-Item -LiteralPath $resolvedPackage -Recurse -Force
@@ -46,36 +58,46 @@ Copy-Item -LiteralPath $modelFullPath -Destination (Join-Path $packageDir "model
 Get-ChildItem -LiteralPath $packageDir -Recurse -Directory -Filter "__pycache__" |
     Remove-Item -Recurse -Force
 
-@'
-# 后端运行包
+$readmeContent = @'
+# Backend runtime package
 
-## 安装环境
+## Install
 
 ```powershell
 .\scripts\setup_env.ps1
 ```
 
-## 启动后端
+## Start backend GUI
+
+```powershell
+.\START_BACKEND_GUI.ps1
+```
+
+## Start backend service
 
 ```powershell
 .\START_BACKEND.ps1
 ```
 
-默认监听 `0.0.0.0:5001`，加载 6 类课堂行为模型：
+Default listen address: `0.0.0.0:5001`.
+
+Default six-class classroom behaviour model:
 
 ```txt
 models\classroom_behaviour_6cls.pt
 ```
 
-异常状态框显示为红色，正常状态框显示为绿色。
+Abnormal people are highlighted in red. Normal people stay green.
 
-启动后，在前端电脑使用后端电脑的 IPv4 地址连接。
-'@ | Set-Content -Encoding UTF8 (Join-Path $packageDir "README_BACKEND.md")
+After startup, connect from the frontend computer with this backend computer's IPv4 address.
+'@
+Set-Content -Path $readmePath -Encoding UTF8 -Value $readmeContent
 
-@'
+$startBackendContent = @'
 $ErrorActionPreference = "Stop"
 .\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model models\classroom_behaviour_6cls.pt
-'@ | Set-Content -Encoding UTF8 (Join-Path $packageDir "START_BACKEND.ps1")
+'@
+Set-Content -Path $startBackendPath -Encoding UTF8 -Value $startBackendContent
 
 Compress-Archive -Path (Join-Path $packageDir "*") -DestinationPath $zipPath -Force
 
