@@ -63,10 +63,12 @@ class CameraSenderWorker(QtCore.QThread):
 
     def run(self) -> None:
         self._running = True
+        had_error = False
         delay_seconds = 1.0 / max(0.1, self.fps)
         cap = cv2.VideoCapture(self.camera)
         try:
             if not cap.isOpened():
+                had_error = True
                 self.error_occurred.emit(f"无法打开摄像头 {self.camera}")
                 return
 
@@ -79,6 +81,7 @@ class CameraSenderWorker(QtCore.QThread):
                     loop_started = time.time()
                     ok, frame = cap.read()
                     if not ok:
+                        had_error = True
                         self.error_occurred.emit("读取摄像头画面失败")
                         break
 
@@ -93,6 +96,7 @@ class CameraSenderWorker(QtCore.QThread):
                             image_bytes=image_bytes,
                         )
                     except OSError as exc:
+                        had_error = True
                         self.error_occurred.emit(f"发送画面失败：{exc}")
                         break
 
@@ -113,13 +117,16 @@ class CameraSenderWorker(QtCore.QThread):
                     if sleep_for > 0:
                         time.sleep(sleep_for)
         except OSError as exc:
+            had_error = True
             self.error_occurred.emit(f"连接失败：{exc}")
         except Exception as exc:
+            had_error = True
             self.error_occurred.emit(f"发送端错误：{exc}")
         finally:
             cap.release()
             self._running = False
-            self.status_changed.emit("已断开")
+            if not had_error:
+                self.status_changed.emit("已断开")
 
 
 class CameraClientWindow(QtWidgets.QMainWindow):
@@ -127,6 +134,7 @@ class CameraClientWindow(QtWidgets.QMainWindow):
         _ensure_app()
         super().__init__()
         self.worker: CameraSenderWorker | None = None
+        self._closing_after_worker = False
         self.setWindowTitle("课堂行为监测 - 前端发送端")
         self.resize(900, 620)
         self._build_ui()
@@ -210,6 +218,11 @@ class CameraClientWindow(QtWidgets.QMainWindow):
         self.start_button.setEnabled(not running)
         self.stop_button.setEnabled(running)
 
+    def _set_stopping(self) -> None:
+        self.start_button.setEnabled(False)
+        self.stop_button.setEnabled(False)
+        self.status_label.setText("状态：停止中")
+
     def start_sender(self) -> None:
         if self.worker is not None and self.worker.isRunning():
             return
@@ -234,11 +247,17 @@ class CameraClientWindow(QtWidgets.QMainWindow):
         if self.worker is not None:
             self.worker.stop()
             if self.worker.isRunning():
-                self.worker.wait(2000)
+                self._set_stopping()
+                return
+            self.worker = None
         self._set_running(False)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        self.stop_sender()
+        if self.worker is not None and self.worker.isRunning():
+            self._closing_after_worker = True
+            self.stop_sender()
+            event.ignore()
+            return
         super().closeEvent(event)
 
     def _update_preview(self, image: QtGui.QImage) -> None:
@@ -270,6 +289,10 @@ class CameraClientWindow(QtWidgets.QMainWindow):
 
     def _on_worker_finished(self) -> None:
         self._set_running(False)
+        self.worker = None
+        if self._closing_after_worker:
+            self._closing_after_worker = False
+            self.close()
 
 
 def main() -> None:
