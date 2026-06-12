@@ -1,0 +1,53 @@
+// 课堂行为状态映射与报警判定逻辑图
+// 渲染：dot -Tpng behaviour-logic.dot -o behaviour-logic.png
+digraph BehaviourLogic {
+    rankdir=LR;
+    bgcolor="white";
+    fontname="WenQuanYi Zen Hei";
+    labelloc="t";
+    fontsize=20;
+    label="图3  六类课堂行为状态映射与报警判定逻辑";
+    nodesep=0.30;
+    ranksep=0.75;
+
+    node [fontname="WenQuanYi Zen Hei", fontsize=12, shape=box, style="rounded,filled", margin="0.16,0.09"];
+    edge [fontname="WenQuanYi Zen Hei", fontsize=11, color="#555555"];
+
+    det [label="YOLOv8 单帧检测结果\n（标签 + 置信度 + 检测框）", fillcolor="#D7E8C4", color="#548235"];
+
+    conf [label="置信度 ≥ 0.35？", shape=diamond, style=filled, fillcolor="#FFE599", height=1.0];
+    ignore [label="忽略\n灰框 / 不参与报警", fillcolor="#E2E2E2", color="#7F7F7F"];
+
+    // 正常类
+    subgraph cluster_normal {
+        label="正常状态（绿框）"; fontsize=13; style="rounded,filled"; color="#548235"; fillcolor="#EAF3E0"; labeljust="l";
+        n1 [label="Hand-raise 举手", fillcolor="#C6E0B4"];
+        n2 [label="Reading 看书", fillcolor="#C6E0B4"];
+        n3 [label="Writing 写字", fillcolor="#C6E0B4"];
+    }
+
+    // 异常类
+    subgraph cluster_abnormal {
+        label="异常状态（红框）"; fontsize=13; style="rounded,filled"; color="#C00000"; fillcolor="#FBE5E0"; labeljust="l";
+        a1 [label="Useing-Phone 使用手机", fillcolor="#F8CBAD"];
+        a2 [label="Head-down 低头", fillcolor="#F8CBAD"];
+        a3 [label="Sleeping 睡觉", fillcolor="#F8CBAD"];
+    }
+
+    dur [label="同一异常类别\n连续 ≥ 3 秒？", shape=diamond, style=filled, fillcolor="#FFE599", height=1.1];
+    susp [label="疑似（suspicious）\n顶部提示，不报警", fillcolor="#FFF2CC", color="#BF9000"];
+    alarm [label="触发报警 ALARM\n红框 + 截图 + CSV 日志", fillcolor="#FF9999", color="#C00000", penwidth=1.6];
+
+    det -> conf;
+    conf -> ignore [label="否"];
+    conf -> n1 [label="是", color="#548235"];
+    conf -> n2 [color="#548235"];
+    conf -> n3 [color="#548235"];
+    conf -> a1 [color="#C00000"];
+    conf -> a2 [color="#C00000"];
+    conf -> a3 [color="#C00000"];
+
+    a1 -> dur; a2 -> dur; a3 -> dur;
+    dur -> susp  [label="否"];
+    dur -> alarm [label="是"];
+}

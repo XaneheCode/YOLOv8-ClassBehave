@@ -1,0 +1,77 @@
+// 系统运行流程图 —— 前端采集发送 + 后端接收检测报警
+// 渲染：dot -Tpng runtime-flowchart.dot -o runtime-flowchart.png
+digraph RuntimeFlow {
+    rankdir=TB;
+    bgcolor="white";
+    fontname="WenQuanYi Zen Hei";
+    labelloc="t";
+    fontsize=20;
+    label="图2  系统运行流程图";
+    nodesep=0.35;
+    ranksep=0.45;
+    compound=true;
+
+    node [fontname="WenQuanYi Zen Hei", fontsize=11.5, margin="0.14,0.07"];
+    edge [fontname="WenQuanYi Zen Hei", fontsize=10.5, color="#555555"];
+
+    // ===== 前端流程 =====
+    subgraph cluster_front {
+        label="前端笔记本（采集发送）";
+        fontsize=14; style="rounded,filled"; color="#2E75B6"; fillcolor="#EAF1FB"; labeljust="l";
+
+        f_start [label="开始", shape=ellipse, style=filled, fillcolor="#BDD7EE"];
+        f_open  [label="打开摄像头\n建立 TCP 连接", shape=box, style="rounded,filled", fillcolor="#CFE2F3"];
+        f_camok [label="摄像头 / 连接\n成功？", shape=diamond, style=filled, fillcolor="#FFE599", height=1.0];
+        f_err   [label="提示错误并退出", shape=box, style="rounded,filled", fillcolor="#F8CBAD"];
+        f_read  [label="读取一帧图像", shape=box, style="rounded,filled", fillcolor="#CFE2F3"];
+        f_resize[label="缩放到 640 像素宽", shape=box, style="rounded,filled", fillcolor="#CFE2F3"];
+        f_enc   [label="JPEG 编码（质量 80）", shape=box, style="rounded,filled", fillcolor="#CFE2F3"];
+        f_pack  [label="加帧号 + 时间戳\nNSGD 帧打包", shape=box, style="rounded,filled", fillcolor="#CFE2F3"];
+        f_send  [label="TCP 发送（约 8 FPS）", shape=box, style="rounded,filled", fillcolor="#CFE2F3"];
+
+        f_start -> f_open -> f_camok;
+        f_camok -> f_err   [label="否"];
+        f_camok -> f_read  [label="是"];
+        f_read -> f_resize -> f_enc -> f_pack -> f_send;
+        f_send -> f_read   [label="循环采集", constraint=false, color="#2E75B6", style=dashed];
+    }
+
+    // ===== 后端流程 =====
+    subgraph cluster_back {
+        label="后端笔记本（接收检测报警）";
+        fontsize=14; style="rounded,filled"; color="#548235"; fillcolor="#EAF3E0"; labeljust="l";
+
+        b_listen [label="监听 5001\n接受前端连接", shape=box, style="rounded,filled", fillcolor="#D7E8C4"];
+        b_header [label="读取 20 字节包头", shape=box, style="rounded,filled", fillcolor="#D7E8C4"];
+        b_magic  [label="magic == NSGD？", shape=diamond, style=filled, fillcolor="#FFE599", height=1.0];
+        b_drop   [label="丢弃该帧 / 报协议错误", shape=box, style="rounded,filled", fillcolor="#F8CBAD"];
+        b_readimg[label="按 image_len\n读取完整 JPEG", shape=box, style="rounded,filled", fillcolor="#D7E8C4"];
+        b_dec    [label="JPEG 解码", shape=box, style="rounded,filled", fillcolor="#D7E8C4"];
+        b_detect [label="YOLOv8 六类检测", shape=box, style="rounded,filled", fillcolor="#D7E8C4"];
+        b_conf   [label="置信度 ≥ 0.35？", shape=diamond, style=filled, fillcolor="#FFE599", height=1.0];
+        b_ignore [label="忽略目标（灰框）", shape=box, style="rounded,filled", fillcolor="#E2E2E2"];
+        b_map    [label="类别映射\n正常 / 异常", shape=box, style="rounded,filled", fillcolor="#D7E8C4"];
+        b_alarmq [label="异常类别\n连续 ≥ 3 秒？", shape=diamond, style=filled, fillcolor="#FFE599", height=1.1];
+        b_alarm  [label="触发报警\n红框 + 截图 + 写 CSV", shape=box, style="rounded,filled", fillcolor="#F8CBAD", color="#C00000"];
+        b_normal [label="正常显示（绿框）", shape=box, style="rounded,filled", fillcolor="#D7E8C4"];
+        b_show   [label="绘制叠加并显示\n更新顶部状态栏", shape=box, style="rounded,filled", fillcolor="#D7E8C4"];
+
+        b_listen -> b_header -> b_magic;
+        b_magic -> b_drop    [label="否"];
+        b_magic -> b_readimg [label="是"];
+        b_readimg -> b_dec -> b_detect -> b_conf;
+        b_conf -> b_ignore   [label="否"];
+        b_conf -> b_map      [label="是"];
+        b_map -> b_alarmq;
+        b_alarmq -> b_alarm  [label="是"];
+        b_alarmq -> b_normal [label="否"];
+        b_alarm -> b_show;
+        b_normal -> b_show;
+        b_ignore -> b_show;
+        b_show -> b_header   [label="循环接收", constraint=false, color="#548235", style=dashed];
+    }
+
+    // ===== 网络连接 =====
+    f_send -> b_header [label="无线局域网 TCP 字节流", ltail=cluster_front, lhead=cluster_back,
+                        color="#BF9000", penwidth=1.6, style=bold, constraint=false];
+}

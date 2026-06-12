@@ -1,0 +1,58 @@
+// 系统总体架构图 —— 基于双机的实时图像远程监测与异常分析系统
+// 渲染：dot -Tpng system-architecture.dot -o system-architecture.png
+digraph SystemArchitecture {
+    rankdir=TB;
+    bgcolor="white";
+    fontname="WenQuanYi Zen Hei";
+    labelloc="t";
+    fontsize=17;
+    label="图1  系统总体架构图\n（基于双机的实时图像远程监测与异常分析系统）";
+    nodesep=0.45;
+    ranksep=0.45;
+
+    node [fontname="WenQuanYi Zen Hei", shape=box, style="rounded,filled",
+          fontsize=12, margin="0.20,0.11", penwidth=1.3, width=2.2];
+    edge [fontname="WenQuanYi Zen Hei", fontsize=11, color="#555555", penwidth=1.4];
+
+    // ===== 前端笔记本（纵向）=====
+    subgraph cluster_front {
+        label="前端笔记本（前端 PyQt6 GUI）";
+        fontsize=13.5; style="rounded,filled"; color="#2E75B6"; fillcolor="#EAF1FB"; labeljust="l";
+
+        cam      [label="摄像头采集\nOpenCV VideoCapture", fillcolor="#CFE2F3"];
+        fe_codec [label="图像缩放 + JPEG 编码\nimage_codec\nresize_to_width / encode_jpeg", fillcolor="#CFE2F3"];
+        fe_pack  [label="帧打包发送\nprotocol.encode_packet\n640 宽 · 8 FPS · 质量 80", fillcolor="#CFE2F3"];
+
+        cam -> fe_codec -> fe_pack;
+    }
+
+    // ===== 网络 =====
+    net [label="无线局域网  ·  TCP Socket\nNSGD 帧协议  ·  0.0.0.0 : 5001",
+         shape=box, style="filled", fillcolor="#FFF2CC", color="#BF9000",
+         fontsize=12, penwidth=1.6, width=3.0];
+
+    // ===== 后端笔记本（纵向主链 + 右侧分支）=====
+    subgraph cluster_back {
+        label="后端笔记本（后端 PyQt6 GUI）";
+        fontsize=13.5; style="rounded,filled"; color="#548235"; fillcolor="#EAF3E0"; labeljust="l";
+
+        be_recv    [label="接收与拆帧\nprotocol.recv_packet\n按 image_len 读完整帧", fillcolor="#D7E8C4"];
+        be_decode  [label="JPEG 解码\nimage_codec.decode_jpeg", fillcolor="#D7E8C4"];
+        be_yolo    [label="YOLOv8 检测\nYoloDetector\nconf=0.25 · imgsz=640", fillcolor="#D7E8C4"];
+        be_analyze [label="行为分析\nbehaviour_analyzer\n目标级状态 + 连续 3 秒判定", fillcolor="#D7E8C4"];
+        be_overlay [label="可视化显示\ndraw_overlay + 顶部状态栏\n正常绿框 / 异常红框", fillcolor="#D7E8C4"];
+
+        be_qwen    [label="（可选）千问视觉辅助\nqwen_analysis · DashScope", fillcolor="#E6D7F0", color="#7030A0", style="rounded,filled,dashed"];
+        be_alarm   [label="报警记录\noutput/alarms\nalarms.csv + 截图 jpg", fillcolor="#F8CBAD", color="#C00000"];
+
+        be_recv -> be_decode -> be_yolo -> be_analyze -> be_overlay;
+        be_decode -> be_qwen [label="抽帧", style=dashed, color="#7030A0"];
+        be_analyze -> be_alarm [label="异常报警", color="#C00000"];
+        { rank=same; be_decode; be_qwen; }
+        { rank=same; be_analyze; be_alarm; }
+    }
+
+    // ===== 跨域连接 =====
+    fe_pack -> net  [label="发送 JPEG 帧", color="#BF9000", penwidth=1.7];
+    net -> be_recv  [label="接收字节流", color="#BF9000", penwidth=1.7];
+}
