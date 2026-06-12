@@ -1,7 +1,7 @@
 param(
     [string]$OutputDir = "dist",
     [string]$PackageName = "backend-student-sleep-server",
-    [string]$ModelPath = "models\classroom_behaviour_6cls.pt"
+    [string]$ModelPath = "models\student_behaviour_v6_6cls_img960_e50_best.pt"
 )
 
 $ErrorActionPreference = "Stop"
@@ -53,7 +53,7 @@ Copy-Item -LiteralPath "src\common" -Destination (Join-Path $packageDir "src") -
 Copy-Item -LiteralPath "requirements.txt" -Destination (Join-Path $packageDir "requirements.txt")
 Copy-Item -LiteralPath "scripts\setup_env.ps1" -Destination (Join-Path $packageDir "scripts\setup_env.ps1")
 Copy-Item -LiteralPath "START_BACKEND_GUI.ps1" -Destination (Join-Path $packageDir "START_BACKEND_GUI.ps1")
-Copy-Item -LiteralPath $modelFullPath -Destination (Join-Path $packageDir "models\classroom_behaviour_6cls.pt")
+Copy-Item -LiteralPath $modelFullPath -Destination (Join-Path $packageDir "models\student_behaviour_v6_6cls_img960_e50_best.pt")
 
 Get-ChildItem -LiteralPath $packageDir -Recurse -Directory -Filter "__pycache__" |
     Remove-Item -Recurse -Force
@@ -81,10 +81,10 @@ $readmeContent = @'
 
 Default listen address: `0.0.0.0:5001`.
 
-Default six-class classroom behaviour model:
+Default 50-epoch six-class classroom behaviour model:
 
 ```txt
-models\classroom_behaviour_6cls.pt
+models\student_behaviour_v6_6cls_img960_e50_best.pt
 ```
 
 Abnormal people are highlighted in red. Normal people stay green.
@@ -95,7 +95,7 @@ Set-Content -Path $readmePath -Encoding UTF8 -Value $readmeContent
 
 $startBackendContent = @'
 $ErrorActionPreference = "Stop"
-.\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model models\classroom_behaviour_6cls.pt
+.\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model models\student_behaviour_v6_6cls_img960_e50_best.pt
 '@
 Set-Content -Path $startBackendPath -Encoding UTF8 -Value $startBackendContent
 

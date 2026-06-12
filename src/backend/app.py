@@ -16,7 +16,7 @@ from src.common.protocol import recv_packet
 from src.common.types import AlarmState, DetectionAssessment
 
 
-DEFAULT_MODEL_PATH = "models/classroom_behaviour_6cls.pt"
+DEFAULT_MODEL_PATH = "models/student_behaviour_v6_6cls_img960_e50_best.pt"
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

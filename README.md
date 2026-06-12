@@ -32,10 +32,41 @@
 后端默认监听 `0.0.0.0:5001`，模型路径为：
 
 ```text
-models/classroom_behaviour_6cls.pt
+models/student_behaviour_v6_6cls_img960_e50_best.pt
 ```
 
-该模型来自 `D:\Documents\YOLOv8\yolov8_onnx\models\best_last.pt`，类别为 6 类课堂行为。
+该模型是使用 `Student Behaviour Detection.v6i.yolov8` 数据集训练 50 轮得到的 6 类课堂行为模型。
+
+后端 GUI 也支持直接载入本地测试素材展示识别效果：
+
+- 点击 `选择图片测试`，选择一张课堂图片，后端会直接显示 YOLO 识别框、行为计数和异常状态。
+- 点击 `选择视频测试`，选择一段课堂视频，后端会逐帧播放并实时识别。
+- 点击 `停止测试`，停止当前本地图片/视频展示。
+
+本地素材测试不需要启动前端发送端，适合课程验收时快速展示模型效果；双机协同时仍使用 `开始监听` 接收前端摄像头。
+
+### 可选：千问视觉辅助分析
+
+后端 GUI 已同步原 YOLOv8 项目的千问视觉分析功能。启动后端 GUI 后，系统仍以 YOLO 实时检测和报警为主；千问窗口会按间隔抽取当前画面做辅助分析，并在独立的“千问分析结果”窗口显示紫色辅助框和文字概括。
+
+使用前在当前 PowerShell 终端设置 DashScope API Key：
+
+```powershell
+$env:DASHSCOPE_API_KEY="你的 DashScope API Key"
+.\START_BACKEND_GUI.ps1
+```
+
+可选环境变量：
+
+```powershell
+$env:QWEN_VL_MODEL="qwen3.6-flash"
+$env:QWEN_UPLOAD_INTERVAL_SECONDS="10"
+$env:QWEN_MAX_YOLO_TARGETS="3"
+$env:QWEN_COORDINATE_GRID="1"
+$env:DASHSCOPE_BASE_HTTP_API_URL="https://dashscope.aliyuncs.com/api/v1"
+```
+
+如果未配置 `DASHSCOPE_API_KEY`，后端 YOLO 检测、报警和截图记录仍可正常使用；千问窗口会提示未配置。若当前 YOLO 检测目标数超过 `QWEN_MAX_YOLO_TARGETS`，系统会跳过本次千问分析，避免密集课堂场景下大模型坐标不稳定。
 
 ## 前端 GUI 启动
 
@@ -112,7 +143,7 @@ models/classroom_behaviour_6cls.pt
 使用 `D:\Documents\YOLOv8\yolov8_onnx\测试` 样例图片完成离线测试：
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\offline_test_images.py --images "D:\Documents\YOLOv8\yolov8_onnx\测试" --model models\classroom_behaviour_6cls.pt --output-dir output\offline_test\yolov8-6cls --limit 0 --conf 0.25
+.\.venv\Scripts\python.exe scripts\offline_test_images.py --images "D:\Documents\YOLOv8\yolov8_onnx\测试" --model models\student_behaviour_v6_6cls_img960_e50_best.pt --output-dir output\offline_test\yolov8-6cls --limit 0 --conf 0.25
 ```
 
 本轮测试结果：
@@ -184,7 +215,7 @@ datasets/Student Behaviour Detection.v6i.yolov8
 默认打包模型：
 
 ```text
-models/classroom_behaviour_6cls.pt
+models/student_behaviour_v6_6cls_img960_e50_best.pt
 ```
 
 ## 可选：下载旧三分类数据集

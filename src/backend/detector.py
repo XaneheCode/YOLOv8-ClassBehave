@@ -42,7 +42,7 @@ def result_to_detections(result: Any) -> list[Detection]:
 
 
 class YoloDetector:
-    def __init__(self, model_path: str = "yolov8n.pt", conf: float = 0.35, imgsz: int = 640) -> None:
+    def __init__(self, model_path: str = "yolov8n.pt", conf: float = 0.25, imgsz: int = 640) -> None:
         try:
             from ultralytics import YOLO
         except ImportError as exc:

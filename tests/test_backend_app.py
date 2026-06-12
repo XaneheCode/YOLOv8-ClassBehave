@@ -9,7 +9,7 @@ from src.common.types import AlarmState, Detection, DetectionAssessment
 def test_backend_parser_defaults_to_yolov8_six_class_model():
     args = build_arg_parser().parse_args([])
 
-    assert args.model == "models/classroom_behaviour_6cls.pt"
+    assert args.model == "models/student_behaviour_v6_6cls_img960_e50_best.pt"
 
 
 def test_behaviour_counts_uses_yolov8_chinese_labels():

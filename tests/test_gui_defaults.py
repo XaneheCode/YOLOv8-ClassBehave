@@ -14,7 +14,7 @@ def test_gui_launch_scripts_exist_and_target_gui_modules():
 def test_package_script_uses_six_class_model():
     script = Path("scripts/package_backend.ps1").read_text(encoding="utf-8")
 
-    assert "models\\classroom_behaviour_6cls.pt" in script
+    assert "models\\student_behaviour_v6_6cls_img960_e50_best.pt" in script
     assert "START_BACKEND_GUI.ps1" in script
     assert "function Test-IsSubPath" in script
     assert "$modelFullPath.StartsWith" not in script
@@ -61,7 +61,7 @@ def test_package_script_builds_backend_package_with_gui_files():
         assert (package_dir / "src" / "backend" / "gui_app.py").exists()
         assert (package_dir / "src" / "common" / "protocol.py").exists()
         assert (
-            package_dir / "models" / "classroom_behaviour_6cls.pt"
+            package_dir / "models" / "student_behaviour_v6_6cls_img960_e50_best.pt"
         ).read_bytes() == b"fake model"
         assert (output_dir / "test-backend-package.zip").exists()
 
