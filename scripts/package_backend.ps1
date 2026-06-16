@@ -1,7 +1,7 @@
 param(
     [string]$OutputDir = "dist",
     [string]$PackageName = "backend-student-sleep-server",
-    [string]$ModelPath = "models\student_behaviour_v6_6cls_img960_e50_best.pt"
+    [string]$ModelPath = "models\merged_classroom_6cls_v2_img960_e50_2026-06-13_best.pt"
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,6 +18,7 @@ function Test-IsSubPath {
 
 $workspace = (Resolve-Path ".").Path
 $modelFullPath = (Resolve-Path -LiteralPath $ModelPath).Path
+$packagedModelName = Split-Path -Leaf $modelFullPath
 $distDir = Join-Path $workspace $OutputDir
 $packageDir = Join-Path $distDir $PackageName
 $zipPath = Join-Path $distDir "$PackageName.zip"
@@ -53,7 +54,7 @@ Copy-Item -LiteralPath "src\common" -Destination (Join-Path $packageDir "src") -
 Copy-Item -LiteralPath "requirements.txt" -Destination (Join-Path $packageDir "requirements.txt")
 Copy-Item -LiteralPath "scripts\setup_env.ps1" -Destination (Join-Path $packageDir "scripts\setup_env.ps1")
 Copy-Item -LiteralPath "START_BACKEND_GUI.ps1" -Destination (Join-Path $packageDir "START_BACKEND_GUI.ps1")
-Copy-Item -LiteralPath $modelFullPath -Destination (Join-Path $packageDir "models\student_behaviour_v6_6cls_img960_e50_best.pt")
+Copy-Item -LiteralPath $modelFullPath -Destination (Join-Path $packageDir "models\$packagedModelName")
 
 Get-ChildItem -LiteralPath $packageDir -Recurse -Directory -Filter "__pycache__" |
     Remove-Item -Recurse -Force
@@ -81,22 +82,23 @@ $readmeContent = @'
 
 Default listen address: `0.0.0.0:5001`.
 
-Default 50-epoch six-class classroom behaviour model:
+Default six-class classroom behaviour model:
 
 ```txt
-models\student_behaviour_v6_6cls_img960_e50_best.pt
+models\__MODEL_FILE__
 ```
 
 Abnormal people are highlighted in red. Normal people stay green.
 
 After startup, connect from the frontend computer with this backend computer's IPv4 address.
 '@
+$readmeContent = $readmeContent.Replace("__MODEL_FILE__", $packagedModelName)
 Set-Content -Path $readmePath -Encoding UTF8 -Value $readmeContent
 
-$startBackendContent = @'
+$startBackendContent = @"
 $ErrorActionPreference = "Stop"
-.\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model models\student_behaviour_v6_6cls_img960_e50_best.pt
-'@
+.\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model "models\$packagedModelName"
+"@
 Set-Content -Path $startBackendPath -Encoding UTF8 -Value $startBackendContent
 
 Compress-Archive -Path (Join-Path $packageDir "*") -DestinationPath $zipPath -Force

@@ -16,7 +16,16 @@ from src.common.protocol import recv_packet
 from src.common.types import AlarmState, DetectionAssessment
 
 
-DEFAULT_MODEL_PATH = "models/student_behaviour_v6_6cls_img960_e50_best.pt"
+DEFAULT_MODEL_PATH = "models/merged_classroom_6cls_v2_img960_e50_2026-06-13_best.pt"
+DENSE_OVERLAY_TARGET_THRESHOLD = 12
+LABEL_ABBREVIATIONS = {
+    "Hand-raise": "Hand",
+    "Reading": "Read",
+    "Writing": "Write",
+    "Useing-Phone": "Phone",
+    "Head-down": "Head",
+    "Sleeping": "Sleep",
+}
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -50,6 +59,59 @@ def frame_status_text(alarm: AlarmState) -> str:
     return "normal"
 
 
+def _assessment_color(assessment: DetectionAssessment) -> tuple[int, int, int]:
+    if assessment.status == "ignored":
+        return (120, 120, 120)
+    return (0, 0, 255) if assessment.is_abnormal else (0, 180, 0)
+
+
+def _short_detection_label(assessment: DetectionAssessment) -> str:
+    label = LABEL_ABBREVIATIONS.get(assessment.detection.label, assessment.detection.label)
+    return f"{label} {assessment.detection.confidence:.2f}"
+
+
+def _compact_status_text(alarm: AlarmState) -> str:
+    if alarm.is_alarm:
+        status = "ALARM"
+    elif alarm.suspicious:
+        status = "SUSPICIOUS"
+    else:
+        status = "NORMAL"
+
+    labels = list(alarm.abnormal_labels)
+    if len(labels) > 2:
+        label_text = f"{', '.join(labels[:2])} +{len(labels) - 2}"
+    else:
+        label_text = ", ".join(labels)
+
+    if label_text:
+        return f"{status} abnormal={alarm.abnormal_count} {label_text}"
+    if alarm.suspicious or alarm.is_alarm:
+        return f"{status} abnormal={alarm.abnormal_count}"
+    return status
+
+
+def _draw_text_with_background(
+    image: np.ndarray,
+    text: str,
+    origin: tuple[int, int],
+    color: tuple[int, int, int],
+    font_scale: float,
+    thickness: int = 1,
+    background: tuple[int, int, int] = (20, 20, 20),
+) -> None:
+    x, y = origin
+    height, width = image.shape[:2]
+    padding = 4
+    (text_width, text_height), baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
+    x = max(0, min(x, max(0, width - text_width - padding * 2)))
+    y = max(text_height + padding, min(y, height - padding - baseline))
+    top_left = (x, y - text_height - padding)
+    bottom_right = (min(width - 1, x + text_width + padding * 2), min(height - 1, y + baseline + padding))
+    cv2.rectangle(image, top_left, bottom_right, background, -1)
+    cv2.putText(image, text, (x + padding, y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness, cv2.LINE_AA)
+
+
 def draw_overlay(
     frame: np.ndarray,
     assessments: list[DetectionAssessment],
@@ -58,28 +120,37 @@ def draw_overlay(
     latency_ms: int,
 ) -> np.ndarray:
     output = frame.copy()
+    visible_assessments = [assessment for assessment in assessments if assessment.status != "ignored"]
+    dense_mode = len(visible_assessments) > DENSE_OVERLAY_TARGET_THRESHOLD
+    badge_number = 1
+
     for assessment in assessments:
+        if assessment.status == "ignored":
+            continue
+
         detection = assessment.detection
         x1, y1, x2, y2 = detection.bbox
-        if assessment.status == "ignored":
-            color = (120, 120, 120)
-        else:
-            color = (0, 0, 255) if assessment.is_abnormal else (0, 180, 0)
+        color = _assessment_color(assessment)
         cv2.rectangle(output, (x1, y1), (x2, y2), color, 2)
-        label = f"{detection.label} {assessment.status} {detection.confidence:.2f}"
-        cv2.putText(output, label, (x1, max(20, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
 
-    status = frame_status_text(alarm)
+        if dense_mode:
+            label = str(badge_number)
+            badge_number += 1
+            _draw_text_with_background(output, label, (x1, max(18, y1 - 4)), (255, 255, 255), 0.45, 1, color)
+        else:
+            label = _short_detection_label(assessment)
+            _draw_text_with_background(output, label, (x1, max(18, y1 - 4)), color, 0.5, 1)
+
+    status = _compact_status_text(alarm)
     status_color = (0, 0, 255) if alarm.is_alarm else (0, 180, 0)
-    cv2.putText(output, status, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_color, 2)
-    cv2.putText(
+    _draw_text_with_background(output, status, (20, 30), status_color, 0.75, 2)
+    _draw_text_with_background(
         output,
         f"fps={fps:.1f} latency={latency_ms}ms reason={alarm.reason}",
         (20, 60),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
         (255, 255, 255),
-        2,
+        0.5,
+        1,
     )
     return output
 

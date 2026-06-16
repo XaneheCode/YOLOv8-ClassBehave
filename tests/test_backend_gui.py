@@ -8,7 +8,17 @@ import numpy as np
 from PyQt6 import QtWidgets
 
 from src.backend.app import DEFAULT_MODEL_PATH
-from src.backend.gui_app import BackendMonitorWindow, BackendReceiverWorker, LocalMediaWorker
+from src.backend.gui_app import (
+    BackendMonitorWindow,
+    BackendReceiverWorker,
+    LocalMediaWorker,
+    QwenWorker,
+    DEFAULT_PERSON_MODEL_PATH,
+    INFERENCE_MODE_PERSON_VLM,
+    format_qwen_result_details,
+    qwen_person_color,
+)
+from src.backend.qwen_analysis import QwenAnalysisResult, QwenPerson, QwenSettings
 from src.common.protocol import FramePacket
 from src.common.types import AlarmState, Detection, DetectionAssessment
 
@@ -26,16 +36,154 @@ def test_backend_gui_defaults():
     try:
         assert window.host_edit.text() == "0.0.0.0"
         assert window.port_spin.value() == 5001
-        assert window.model_edit.text() == DEFAULT_MODEL_PATH
+        assert window.mode_combo.currentData() == INFERENCE_MODE_PERSON_VLM
+        assert DEFAULT_PERSON_MODEL_PATH == "yolov8s.pt"
+        assert window.model_edit.text() == DEFAULT_PERSON_MODEL_PATH
         assert window.alarm_spin.value() == 3.0
         assert window.output_edit.text() == "output/alarms"
         assert "未监听" in window.status_label.text()
         assert window.stop_button.isEnabled() is False
-        assert window.qwen_window.windowTitle() == "千问分析结果"
+        assert window.qwen_window.windowTitle() == "大模型分析结果"
+        assert window.qwen_window.result_group.title() == "分析结果"
+        assert window.qwen_window.status_group.title() == "大模型状态"
+        assert window.qwen_window.text_browser is window.qwen_window.result_browser
         assert window.image_test_button.text() == "选择图片测试"
         assert window.video_test_button.text() == "选择视频测试"
         assert window.stop_test_button.text() == "停止测试"
         assert window.stop_test_button.isEnabled() is False
+    finally:
+        window.close()
+        window.deleteLater()
+
+
+def test_qwen_result_details_include_numbered_six_class_labels():
+    result = QwenAnalysisResult(
+        people=[
+            QwenPerson(bbox=[10, 20, 60, 110], label="Writing", status="坐在座位上，正在写字", confidence="high"),
+            QwenPerson(bbox=[100, 30, 160, 130], label="Head-down", status="低头看向桌面", confidence="medium"),
+        ],
+        summary="多名学生在教室内学习。",
+        raw_text="{}",
+    )
+
+    details = format_qwen_result_details(result)
+
+    assert "大模型概括：多名学生在教室内学习。" in details
+    assert "1. 类别：写字，坐标 [10, 20, 60, 110]，状态：坐在座位上，正在写字，置信度：high" in details
+    assert "2. 类别：低头，坐标 [100, 30, 160, 130]，状态：低头看向桌面，置信度：medium" in details
+
+
+def test_backend_qwen_window_updates_result_and_status_separately():
+    _app()
+    window = BackendMonitorWindow()
+    try:
+        qwen_window = window.qwen_window
+        qwen_window.show = lambda: None
+
+        qwen_window.show_pending()
+
+        assert "正在上传" in qwen_window.status_browser.toPlainText()
+        assert "等待分析结果" in qwen_window.result_browser.toPlainText()
+
+        result = QwenAnalysisResult(
+            people=[QwenPerson(bbox=[1, 2, 20, 30], label="Reading", status="正在看书", confidence="high")],
+            summary="一名学生正在看书。",
+            raw_text="{}",
+        )
+        qwen_window.show_result(np.zeros((40, 50, 3), dtype=np.uint8), result)
+
+        assert "类别：看书" in qwen_window.result_browser.toPlainText()
+        assert "分析完成" in qwen_window.status_browser.toPlainText()
+    finally:
+        window.close()
+        window.deleteLater()
+
+
+def test_mode_selector_switches_between_person_and_six_class_models():
+    _app()
+    window = BackendMonitorWindow()
+    try:
+        window.mode_combo.setCurrentIndex(1)
+        assert window.model_edit.text() == DEFAULT_MODEL_PATH
+
+        window.mode_combo.setCurrentIndex(0)
+        assert window.model_edit.text() == DEFAULT_PERSON_MODEL_PATH
+    finally:
+        window.close()
+        window.deleteLater()
+
+
+def test_qwen_worker_person_mode_classifies_numbered_crop_grid(monkeypatch):
+    _app()
+    frame = np.zeros((80, 80, 3), dtype=np.uint8)
+    detections = [Detection(label="person", confidence=0.91, bbox=(10, 10, 40, 60))]
+    settings = QwenSettings(api_key="key", model="gpt-5.5", interval_seconds=10, provider="openai")
+    captured = {}
+
+    def fake_call_person_crop_vision(grid_image, source_by_id, settings):
+        captured["grid_shape"] = grid_image.shape
+        captured["source_by_id"] = source_by_id
+        return QwenAnalysisResult(
+            people=[QwenPerson(bbox=[10, 10, 40, 60], label="Writing", status="正在写字", confidence="high")],
+            summary="ok",
+            raw_text="{}",
+        )
+
+    monkeypatch.setattr("src.backend.gui_app.call_person_crop_vision", fake_call_person_crop_vision)
+
+    worker = QwenWorker(frame, settings, detections=detections, mode=INFERENCE_MODE_PERSON_VLM)
+    results = []
+    worker.succeeded.connect(lambda display_frame, result: results.append((display_frame, result)))
+    worker.run()
+
+    assert results[0][0].shape == frame.shape
+    assert results[0][1].people[0].label == "Writing"
+    assert captured["source_by_id"][1].bbox == (10, 10, 40, 60)
+    assert captured["grid_shape"][0] > 0
+
+
+def test_qwen_person_color_uses_six_class_palette():
+    assert qwen_person_color("Hand-raise").getRgb()[:3] == (37, 99, 235)
+    assert qwen_person_color("Reading").getRgb()[:3] == (22, 163, 74)
+    assert qwen_person_color("Writing").getRgb()[:3] == (8, 145, 178)
+    assert qwen_person_color("Useing-Phone").getRgb()[:3] == (220, 38, 38)
+    assert qwen_person_color("Head-down").getRgb()[:3] == (234, 88, 12)
+    assert qwen_person_color("Sleeping").getRgb()[:3] == (147, 51, 234)
+
+
+def test_qwen_in_flight_is_released_only_after_result_or_error():
+    _app()
+    window = BackendMonitorWindow()
+    try:
+        window._qwen_in_flight = True
+        window.qwen_worker = object()
+
+        window._on_qwen_worker_finished()
+
+        assert window.qwen_worker is None
+        assert window._qwen_in_flight is True
+
+        window._show_qwen_error(None, "timeout")
+
+        assert window._qwen_in_flight is False
+    finally:
+        window.close()
+        window.deleteLater()
+
+
+def test_qwen_error_starts_cooldown_before_next_upload():
+    _app()
+    window = BackendMonitorWindow()
+    try:
+        window._qwen_in_flight = True
+        window._show_qwen_error(None, "network")
+
+        assert window._qwen_in_flight is False
+        assert window._qwen_cooldown_until > 0
+
+        window._handle_qwen_frame(np.zeros((20, 20, 3), dtype=np.uint8), target_count=0)
+
+        assert window.qwen_worker is None
     finally:
         window.close()
         window.deleteLater()
@@ -369,13 +517,14 @@ def test_worker_emits_raw_frame_for_qwen_after_detection(monkeypatch):
         "src.backend.gui_app.draw_overlay",
         lambda frame, assessments, alarm, fps, latency_ms: frame,
     )
-    worker.qwen_frame_ready.connect(lambda frame, target_count: qwen_frames.append((frame, target_count)))
+    worker.qwen_frame_ready.connect(lambda frame, detections: qwen_frames.append((frame, detections)))
 
     worker.run()
 
     assert len(qwen_frames) == 1
     assert qwen_frames[0][0].shape == (20, 30, 3)
-    assert qwen_frames[0][1] == 2
+    assert len(qwen_frames[0][1]) == 2
+    assert qwen_frames[0][1][0].label == "Reading"
 
 
 class FakeAlarmAnalyzer:
@@ -432,7 +581,7 @@ def test_local_image_worker_processes_one_frame_and_emits_display_updates(monkey
     statuses = []
     alarms = []
     worker.frame_ready.connect(frames.append)
-    worker.qwen_frame_ready.connect(lambda image, target_count: qwen_frames.append((image, target_count)))
+    worker.qwen_frame_ready.connect(lambda image, detections: qwen_frames.append((image, detections)))
     worker.metrics_ready.connect(lambda fps, resolution, frame_count, latency_ms: metrics.append((resolution, frame_count)))
     worker.counts_ready.connect(counts.append)
     worker.status_changed.connect(statuses.append)
@@ -443,7 +592,8 @@ def test_local_image_worker_processes_one_frame_and_emits_display_updates(monkey
     assert len(frames) == 1
     assert len(qwen_frames) == 1
     assert qwen_frames[0][0].shape == frame.shape
-    assert qwen_frames[0][1] == 1
+    assert len(qwen_frames[0][1]) == 1
+    assert qwen_frames[0][1][0].label == "Reading"
     assert metrics == [("32x24", 1)]
     assert counts[-1]["看书"] == 1
     assert statuses[0] == "加载模型"

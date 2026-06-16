@@ -29,13 +29,28 @@
 .\START_BACKEND_GUI.ps1
 ```
 
-后端默认监听 `0.0.0.0:5001`，模型路径为：
+后端默认监听 `0.0.0.0:5001`。默认识别模式为 `人体YOLO+大模型`，模型路径为：
 
 ```text
-models/student_behaviour_v6_6cls_img960_e50_best.pt
+yolov8s.pt
 ```
 
-该模型是使用 `Student Behaviour Detection.v6i.yolov8` 数据集训练 50 轮得到的 6 类课堂行为模型。
+该模式使用 COCO 预训练 YOLOv8 只检测 `person` 人体框；后端会把人体框外扩裁剪、编号拼成一张大图，再交给大模型判断每个编号人物的六类行为，最后把分类结果回填到原始人体框上显示。GUI 中仍保留 `六类YOLO` 模式，可切回训练好的六分类权重做对比或回退。当前默认使用 `yolov8s.pt`，人体检测精度通常高于 `yolov8n.pt`。
+
+后端默认 YOLO 推理尺寸为 `imgsz=960`，用于兼顾大教室小目标和实时速度。如果现场远处学生漏检较多，可以在 `src/backend/detector.py` 中调大 `DEFAULT_INFERENCE_SIZE`；如果实时视频卡顿，可以调小。
+
+## 模型清单
+
+| 文件 | 日期 | 用途 |
+| --- | --- | --- |
+| `yolov8s.pt` | Ultralytics COCO 预训练 | 当前默认人体检测模型，只保留 `person` 类 |
+| `yolov8n.pt` | Ultralytics COCO 预训练 | 轻量人体检测模型，速度更快但精度通常低于 `yolov8s.pt` |
+| `models/merged_classroom_6cls_v2_img960_e50_2026-06-13_best.pt` | 2026-06-13 | 六类YOLO回退模型，merged-classroom-6cls-v2 训练 50 轮最佳权重 |
+| `models/classroom_behaviour_6cls_2024-10-02_baseline.pt` | 2024-10-02 | 原始 6 类课堂行为基线模型，保留用于对比和回退 |
+| `models/student_behaviour_v6_6cls_img960_e50_2026-06-12_best.pt` | 2026-06-12 | Student Behaviour Detection v6 单数据集训练 50 轮模型 |
+| `models/scb_yolov7_HRW_4.2k_2026-06-12.pt` | 2026-06-12 | SCB YOLOv7 HRW 权重，仅用于兼容性测试，不作为当前 YOLOv8 默认模型 |
+
+为兼容旧命令，`models/classroom_behaviour_6cls.pt`、`models/student_behaviour_v6_6cls_img960_e50_best.pt`、`models/yolov7_HRW_4.2k.pt` 和 `models/merged_classroom_6cls_v2_img960_e50_best.pt` 仍保留为历史文件名。
 
 后端 GUI 也支持直接载入本地测试素材展示识别效果：
 
@@ -45,9 +60,9 @@ models/student_behaviour_v6_6cls_img960_e50_best.pt
 
 本地素材测试不需要启动前端发送端，适合课程验收时快速展示模型效果；双机协同时仍使用 `开始监听` 接收前端摄像头。
 
-### 可选：千问视觉辅助分析
+### 可选：大模型视觉辅助分析
 
-后端 GUI 已同步原 YOLOv8 项目的千问视觉分析功能。启动后端 GUI 后，系统仍以 YOLO 实时检测和报警为主；千问窗口会按间隔抽取当前画面做辅助分析，并在独立的“千问分析结果”窗口显示紫色辅助框和文字概括。
+后端 GUI 已同步原 YOLOv8 项目的视觉大模型分析功能。默认 `人体YOLO+大模型` 模式下，系统以 YOLO 人体框为基础，按间隔抽取当前画面中的人体框，拼成编号大图给大模型分类，并在独立的“大模型分析结果”窗口显示分类后的行为框、分析结果和运行状态。
 
 使用前在当前 PowerShell 终端设置 DashScope API Key：
 
@@ -61,12 +76,47 @@ $env:DASHSCOPE_API_KEY="你的 DashScope API Key"
 ```powershell
 $env:QWEN_VL_MODEL="qwen3.6-flash"
 $env:QWEN_UPLOAD_INTERVAL_SECONDS="10"
-$env:QWEN_MAX_YOLO_TARGETS="3"
+$env:QWEN_MAX_YOLO_TARGETS="30"
 $env:QWEN_COORDINATE_GRID="1"
 $env:DASHSCOPE_BASE_HTTP_API_URL="https://dashscope.aliyuncs.com/api/v1"
 ```
 
-如果未配置 `DASHSCOPE_API_KEY`，后端 YOLO 检测、报警和截图记录仍可正常使用；千问窗口会提示未配置。若当前 YOLO 检测目标数超过 `QWEN_MAX_YOLO_TARGETS`，系统会跳过本次千问分析，避免密集课堂场景下大模型坐标不稳定。
+如果未配置大模型 API Key，后端 YOLO 人体检测仍可正常显示；大模型窗口会提示未配置。若当前 YOLO 检测目标数超过 `QWEN_MAX_YOLO_TARGETS`，系统会跳过本次大模型分类，避免密集课堂场景下上传过大、返回过慢。
+
+也可以切换到 OpenAI 兼容视觉接口。后端会把本地处理后的标准 PNG 编码成 `data:image/png;base64,...`，并调用 `/v1/chat/completions`：
+
+```powershell
+$env:VISION_PROVIDER="openai"
+$env:OPENAI_BASE_URL="https://ai.laodog.top/"
+$env:OPENAI_API_KEY="你的 OpenAI 兼容接口 API Key"
+$env:OPENAI_VISION_MODEL="gpt-5.5"
+.\START_BACKEND_GUI.ps1
+```
+
+GPT 视觉分析可能较慢。OpenAI 兼容路径默认会把上传图缩到 640 像素宽，并把接口读取超时设为 120 秒：
+
+```powershell
+$env:OPENAI_IMAGE_MAX_WIDTH="640"
+$env:OPENAI_TIMEOUT_SECONDS="120"
+$env:OPENAI_IMAGE_FORMAT="png"
+```
+
+如果只是模型返回较慢，可以把 `OPENAI_TIMEOUT_SECONDS` 调到 `180`；如果仍然超时，可以临时把 `OPENAI_IMAGE_MAX_WIDTH` 调到 `480`。默认首传仍使用 PNG；如果 PNG 上传遇到网络断连，程序会自动用体积更小的 JPEG 再试一次。
+
+视频或直播连续上传时，部分 OpenAI 兼容中转站可能会偶发 HTTPS 断连。程序会对每次大模型上传使用独立连接、失败后自动重试 1 次，并在网络错误后暂停 30 秒再发送下一帧，避免连续重传。如果仍然频繁报错，建议先降低上传频率或图片宽度：
+
+```powershell
+$env:QWEN_UPLOAD_INTERVAL_SECONDS="20"
+$env:OPENAI_IMAGE_MAX_WIDTH="480"
+$env:OPENAI_TIMEOUT_SECONDS="180"
+$env:OPENAI_IMAGE_FORMAT="jpeg"
+```
+
+OpenAI 兼容路径仍复用同一个辅助分析窗口，窗口标题为“大模型分析结果”。
+
+大模型分析结果会被限制到六类行为：`Hand-raise`、`Reading`、`Writing`、`Useing-Phone`、`Head-down`、`Sleeping`。结果窗口中，图上只显示彩色框和编号，详细类别、坐标、状态和置信度在下方 `分析结果` 区域查看；上传、失败、跳过和完成信息显示在 `大模型状态` 区域。六类颜色分别为：举手蓝色、看书绿色、写字青色、使用手机红色、低头橙色、睡觉紫色。
+
+其中 `Useing-Phone` 使用优先判定：只要大模型看到手机、手持小矩形屏幕、手里拿着手机、双手低头看小屏幕，就优先标为使用手机；只有台式电脑、笔记本电脑、键盘、鼠标或显示器时，不按手机处理。
 
 ## 前端 GUI 启动
 
@@ -105,7 +155,7 @@ $env:DASHSCOPE_BASE_HTTP_API_URL="https://dashscope.aliyuncs.com/api/v1"
 如果只想验证基础环境，也可以临时使用通用模型：
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model yolov8n.pt
+.\.venv\Scripts\python.exe -m src.backend.app --host 0.0.0.0 --port 5001 --model yolov8s.pt
 ```
 
 记录后端笔记本的无线网卡 IPv4 地址，例如 `192.168.1.20`。
@@ -143,7 +193,7 @@ $env:DASHSCOPE_BASE_HTTP_API_URL="https://dashscope.aliyuncs.com/api/v1"
 使用 `D:\Documents\YOLOv8\yolov8_onnx\测试` 样例图片完成离线测试：
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\offline_test_images.py --images "D:\Documents\YOLOv8\yolov8_onnx\测试" --model models\student_behaviour_v6_6cls_img960_e50_best.pt --output-dir output\offline_test\yolov8-6cls --limit 0 --conf 0.25
+.\.venv\Scripts\python.exe scripts\offline_test_images.py --images "D:\Documents\YOLOv8\yolov8_onnx\测试" --model models\merged_classroom_6cls_v2_img960_e50_2026-06-13_best.pt --output-dir output\offline_test\merged-v2-latest --limit 0 --conf 0.25
 ```
 
 本轮测试结果：
@@ -215,7 +265,7 @@ datasets/Student Behaviour Detection.v6i.yolov8
 默认打包模型：
 
 ```text
-models/student_behaviour_v6_6cls_img960_e50_best.pt
+models/merged_classroom_6cls_v2_img960_e50_2026-06-13_best.pt
 ```
 
 ## 可选：下载旧三分类数据集

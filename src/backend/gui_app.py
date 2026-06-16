@@ -16,9 +16,12 @@ from src.backend.app import (
     frame_status_text,
 )
 from src.backend.behaviour_analyzer import BehaviourAnalyzer
+from src.backend.behaviour_analyzer import display_label
 from src.backend.detector import YoloDetector
+from src.backend.person_crop_grid import build_person_crop_grid
 from src.backend.qwen_analysis import (
     QwenAnalysisError,
+    call_person_crop_vision,
     call_qwen_vision,
     load_qwen_settings,
     prepare_frame_for_qwen,
@@ -27,9 +30,63 @@ from src.backend.qwen_analysis import (
 )
 from src.common.image_codec import decode_jpeg
 from src.common.protocol import recv_packet
+from src.common.types import Detection
 
 
 _APP: QtWidgets.QApplication | None = None
+INFERENCE_MODE_PERSON_VLM = "person_vlm"
+INFERENCE_MODE_BEHAVIOUR_YOLO = "behaviour_yolo"
+DEFAULT_PERSON_MODEL_PATH = "yolov8s.pt"
+QWEN_ERROR_COOLDOWN_SECONDS = 30
+QWEN_PERSON_COLORS = {
+    "Hand-raise": (37, 99, 235),
+    "Reading": (22, 163, 74),
+    "Writing": (8, 145, 178),
+    "Useing-Phone": (220, 38, 38),
+    "Head-down": (234, 88, 12),
+    "Sleeping": (147, 51, 234),
+}
+
+
+def qwen_person_color(label: str) -> QtGui.QColor:
+    red, green, blue = QWEN_PERSON_COLORS.get(label, (255, 0, 255))
+    return QtGui.QColor(red, green, blue)
+
+
+def format_qwen_result_details(result) -> str:
+    info = f"大模型概括：{result.summary or '无'}\n\n"
+    for index, person in enumerate(result.people, start=1):
+        info += (
+            f"{index}. 类别：{display_label(person.label)}，坐标 {person.bbox}，"
+            f"状态：{person.status}，置信度：{person.confidence}\n"
+        )
+    if not result.people:
+        info += "未识别到人物框。\n"
+    return info
+
+
+def _qwen_confidence_score(value: str) -> float:
+    return {
+        "high": 0.9,
+        "medium": 0.7,
+        "low": 0.45,
+        "unknown": 0.4,
+    }.get(str(value or "").strip().lower(), 0.4)
+
+
+def qwen_result_to_detections(result) -> list[Detection]:
+    detections = []
+    for person in result.people:
+        if len(person.bbox) != 4:
+            continue
+        detections.append(
+            Detection(
+                label=person.label,
+                confidence=_qwen_confidence_score(person.confidence),
+                bbox=tuple(person.bbox),
+            )
+        )
+    return detections
 
 
 def _ensure_app() -> None:
@@ -56,62 +113,87 @@ def cv_frame_to_qimage(frame) -> QtGui.QImage:
 class QwenAnalysisWindow(QtWidgets.QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("千问分析结果")
-        self.resize(900, 700)
+        self.setWindowTitle("大模型分析结果")
+        self.resize(980, 760)
 
         layout = QtWidgets.QVBoxLayout(self)
         self.image_label = QtWidgets.QLabel(self)
         self.image_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setMinimumSize(860, 520)
+        self.image_label.setMinimumSize(920, 500)
         self.image_label.setStyleSheet("background: #111; color: #ddd;")
-        layout.addWidget(self.image_label)
+        layout.addWidget(self.image_label, stretch=4)
 
-        self.text_browser = QtWidgets.QTextBrowser(self)
-        self.text_browser.setMinimumHeight(120)
-        self.text_browser.setText("等待后端画面")
-        layout.addWidget(self.text_browser)
+        bottom_layout = QtWidgets.QHBoxLayout()
+
+        self.result_group = QtWidgets.QGroupBox("分析结果", self)
+        result_layout = QtWidgets.QVBoxLayout(self.result_group)
+        self.result_browser = QtWidgets.QTextBrowser(self.result_group)
+        self.result_browser.setMinimumHeight(180)
+        self.result_browser.setText("等待分析结果")
+        result_layout.addWidget(self.result_browser)
+        bottom_layout.addWidget(self.result_group, stretch=3)
+
+        self.status_group = QtWidgets.QGroupBox("大模型状态", self)
+        status_layout = QtWidgets.QVBoxLayout(self.status_group)
+        self.status_browser = QtWidgets.QTextBrowser(self.status_group)
+        self.status_browser.setMinimumHeight(180)
+        self.status_browser.setText("等待后端画面")
+        status_layout.addWidget(self.status_browser)
+        bottom_layout.addWidget(self.status_group, stretch=2)
+
+        self.text_browser = self.result_browser
+        layout.addLayout(bottom_layout, stretch=1)
 
     def show_pending(self) -> None:
-        self.text_browser.setText("正在上传当前画面到千问分析...")
+        self.status_browser.setText("正在上传当前画面到大模型分析...")
+        if not self.result_browser.toPlainText().strip():
+            self.result_browser.setText("等待分析结果")
         self.show()
 
     def show_error(self, frame, message: str) -> None:
         if frame is not None:
             self.image_label.setPixmap(self._scaled_pixmap(self._frame_to_pixmap(frame)))
-        self.text_browser.setText(f"千问分析失败：{message}")
+        self.status_browser.setText(f"大模型分析失败：{message}")
         self.show()
 
     def show_skipped(self, frame, message: str) -> None:
         if frame is not None:
             self.image_label.setPixmap(self._scaled_pixmap(self._frame_to_pixmap(frame)))
-        self.text_browser.setText(message)
+        self.status_browser.setText(message)
         self.show()
 
     def show_result(self, frame, result) -> None:
         pixmap = self._frame_to_pixmap(frame)
         painter = QtGui.QPainter(pixmap)
-        pen = QtGui.QPen(QtGui.QColor(255, 0, 255), 3)
-        painter.setPen(pen)
-        painter.setFont(QtGui.QFont("Microsoft YaHei", 14))
+        painter.setFont(QtGui.QFont("Microsoft YaHei", 13, QtGui.QFont.Weight.Bold))
 
-        for person in result.people:
+        for index, person in enumerate(result.people, start=1):
             x1, y1, x2, y2 = person.bbox
-            label = f"{person.status} ({person.confidence})"
-            painter.drawRect(QtCore.QRect(x1, y1, x2 - x1, y2 - y1))
-            label_rect = QtCore.QRect(x1, max(0, y1 - 30), max(220, x2 - x1), 28)
-            painter.fillRect(label_rect, QtGui.QColor(255, 0, 255, 180))
+            color = qwen_person_color(person.label)
+            rect = QtCore.QRect(x1, y1, x2 - x1, y2 - y1)
+            painter.setPen(QtGui.QPen(QtGui.QColor(10, 10, 10), 7))
+            painter.drawRect(rect)
+            pen = QtGui.QPen(color, 5)
+            painter.setPen(pen)
+            painter.drawRect(rect)
+            label = str(index)
+            label_width = max(34, 16 + len(label) * 12)
+            label_rect = QtCore.QRect(x1, max(0, y1 - 30), label_width, 28)
+            badge_color = QtGui.QColor(color)
+            badge_color.setAlpha(255)
+            painter.fillRect(label_rect, badge_color)
             painter.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255), 1))
-            painter.drawText(label_rect.adjusted(4, 0, -4, 0), QtCore.Qt.AlignmentFlag.AlignVCenter, label)
+            painter.drawText(
+                label_rect,
+                QtCore.Qt.AlignmentFlag.AlignCenter,
+                label,
+            )
             painter.setPen(pen)
         painter.end()
 
-        info = f"千问概括：{result.summary or '无'}\n\n"
-        for index, person in enumerate(result.people, start=1):
-            info += f"{index}. 坐标 {person.bbox}，状态：{person.status}，置信度：{person.confidence}\n"
-        if not result.people:
-            info += "未识别到人物框。\n"
         self.image_label.setPixmap(self._scaled_pixmap(pixmap))
-        self.text_browser.setText(info)
+        self.result_browser.setText(format_qwen_result_details(result))
+        self.status_browser.setText(f"分析完成：识别到 {len(result.people)} 个大模型目标")
         self.show()
 
     def _frame_to_pixmap(self, frame) -> QtGui.QPixmap:
@@ -136,25 +218,48 @@ class QwenWorker(QtCore.QThread):
     succeeded = QtCore.pyqtSignal(object, object)
     failed = QtCore.pyqtSignal(object, str)
 
-    def __init__(self, frame, settings, parent=None) -> None:
+    def __init__(
+        self,
+        frame,
+        settings,
+        parent=None,
+        detections: list[Detection] | None = None,
+        mode: str = INFERENCE_MODE_BEHAVIOUR_YOLO,
+    ) -> None:
         super().__init__(parent)
         self.settings = settings
-        self.frame = prepare_frame_for_qwen(frame, settings)
+        self.display_frame = frame.copy()
+        self.detections = detections or []
+        self.mode = mode
+        if mode == INFERENCE_MODE_PERSON_VLM:
+            self.crop_grid = build_person_crop_grid(
+                frame,
+                self.detections,
+                max_people=settings.max_yolo_targets,
+            )
+            self.analysis_frame = self.crop_grid.image
+        else:
+            self.crop_grid = None
+            self.analysis_frame = prepare_frame_for_qwen(frame, settings)
+            self.display_frame = self.analysis_frame
 
     def run(self) -> None:
         try:
-            result = call_qwen_vision(self.frame, self.settings)
+            if self.mode == INFERENCE_MODE_PERSON_VLM and self.crop_grid is not None:
+                result = call_person_crop_vision(self.analysis_frame, self.crop_grid.source_by_id, self.settings)
+            else:
+                result = call_qwen_vision(self.analysis_frame, self.settings)
         except QwenAnalysisError as exc:
-            self.failed.emit(self.frame, str(exc))
+            self.failed.emit(self.display_frame, str(exc))
         except Exception as exc:
-            self.failed.emit(self.frame, f"未知错误：{exc}")
+            self.failed.emit(self.display_frame, f"未知错误：{exc}")
         else:
-            self.succeeded.emit(self.frame, result)
+            self.succeeded.emit(self.display_frame, result)
 
 
 class BackendReceiverWorker(QtCore.QThread):
     frame_ready = QtCore.pyqtSignal(QtGui.QImage)
-    qwen_frame_ready = QtCore.pyqtSignal(object, int)
+    qwen_frame_ready = QtCore.pyqtSignal(object, object)
     metrics_ready = QtCore.pyqtSignal(float, str, int, int)
     counts_ready = QtCore.pyqtSignal(dict)
     alarm_changed = QtCore.pyqtSignal(str, bool)
@@ -169,6 +274,7 @@ class BackendReceiverWorker(QtCore.QThread):
         model: str,
         alarm_seconds: float,
         output_dir: str | Path,
+        inference_mode: str = INFERENCE_MODE_BEHAVIOUR_YOLO,
     ) -> None:
         super().__init__()
         self.host = host
@@ -176,6 +282,7 @@ class BackendReceiverWorker(QtCore.QThread):
         self.model = model
         self.alarm_seconds = alarm_seconds
         self.output_dir = Path(output_dir)
+        self.inference_mode = inference_mode
         self._running = False
         self._server: socket.socket | None = None
         self._conn: socket.socket | None = None
@@ -198,7 +305,10 @@ class BackendReceiverWorker(QtCore.QThread):
         try:
             self.status_changed.emit("加载模型")
             try:
-                detector = YoloDetector(model_path=self.model)
+                if self.inference_mode == INFERENCE_MODE_PERSON_VLM:
+                    detector = YoloDetector(model_path=self.model, allowed_labels={"person"})
+                else:
+                    detector = YoloDetector(model_path=self.model)
             except Exception as exc:
                 had_error = True
                 self.error_occurred.emit(f"模型加载失败：{exc}")
@@ -257,7 +367,7 @@ class BackendReceiverWorker(QtCore.QThread):
                             now = time.time()
                             latency_ms = int(now * 1000) - packet.timestamp_ms
                             detections = detector.detect(frame)
-                            self.qwen_frame_ready.emit(frame.copy(), len(detections))
+                            self.qwen_frame_ready.emit(frame.copy(), detections)
                             assessments, alarm = analyzer.update(detections, now_seconds=now)
 
                             frame_count += 1
@@ -380,7 +490,7 @@ class BackendReceiverWorker(QtCore.QThread):
 
 class LocalMediaWorker(QtCore.QThread):
     frame_ready = QtCore.pyqtSignal(QtGui.QImage)
-    qwen_frame_ready = QtCore.pyqtSignal(object, int)
+    qwen_frame_ready = QtCore.pyqtSignal(object, object)
     metrics_ready = QtCore.pyqtSignal(float, str, int, int)
     counts_ready = QtCore.pyqtSignal(dict)
     alarm_changed = QtCore.pyqtSignal(str, bool)
@@ -395,6 +505,7 @@ class LocalMediaWorker(QtCore.QThread):
         model: str,
         alarm_seconds: float,
         output_dir: str | Path,
+        inference_mode: str = INFERENCE_MODE_BEHAVIOUR_YOLO,
     ) -> None:
         super().__init__()
         self.media_path = str(media_path)
@@ -402,6 +513,7 @@ class LocalMediaWorker(QtCore.QThread):
         self.model = model
         self.alarm_seconds = alarm_seconds
         self.output_dir = Path(output_dir)
+        self.inference_mode = inference_mode
         self._running = False
 
     def stop(self) -> None:
@@ -413,7 +525,10 @@ class LocalMediaWorker(QtCore.QThread):
         try:
             self.status_changed.emit("加载模型")
             try:
-                detector = YoloDetector(model_path=self.model)
+                if self.inference_mode == INFERENCE_MODE_PERSON_VLM:
+                    detector = YoloDetector(model_path=self.model, allowed_labels={"person"})
+                else:
+                    detector = YoloDetector(model_path=self.model)
             except Exception as exc:
                 had_error = True
                 self.error_occurred.emit(f"模型加载失败：{exc}")
@@ -478,7 +593,7 @@ class LocalMediaWorker(QtCore.QThread):
         now = time.time()
         timestamp_ms = int(now * 1000)
         detections = detector.detect(frame)
-        self.qwen_frame_ready.emit(frame.copy(), len(detections))
+        self.qwen_frame_ready.emit(frame.copy(), detections)
         assessments, alarm = analyzer.update(detections, now_seconds=now)
         overlay = draw_overlay(frame, assessments, alarm, fps=fps, latency_ms=0)
 
@@ -500,6 +615,7 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         self.qwen_window = QwenAnalysisWindow(self)
         self._qwen_last_upload_at: float | None = None
         self._qwen_in_flight = False
+        self._qwen_cooldown_until = 0.0
         self._closing_after_worker = False
         self._had_error = False
         self.setWindowTitle("课堂行为监测 - 后端分析端")
@@ -519,7 +635,12 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         self.port_spin.setRange(1, 65535)
         self.port_spin.setValue(5001)
 
-        self.model_edit = QtWidgets.QLineEdit(DEFAULT_MODEL_PATH)
+        self.mode_combo = QtWidgets.QComboBox()
+        self.mode_combo.addItem("人体YOLO+大模型", INFERENCE_MODE_PERSON_VLM)
+        self.mode_combo.addItem("六类YOLO", INFERENCE_MODE_BEHAVIOUR_YOLO)
+        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+
+        self.model_edit = QtWidgets.QLineEdit(DEFAULT_PERSON_MODEL_PATH)
 
         self.alarm_spin = QtWidgets.QDoubleSpinBox()
         self.alarm_spin.setRange(0.5, 30.0)
@@ -532,12 +653,14 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         form.addWidget(self.host_edit, 0, 1)
         form.addWidget(QtWidgets.QLabel("端口"), 0, 2)
         form.addWidget(self.port_spin, 0, 3)
-        form.addWidget(QtWidgets.QLabel("模型路径"), 1, 0)
-        form.addWidget(self.model_edit, 1, 1, 1, 3)
-        form.addWidget(QtWidgets.QLabel("报警秒数"), 2, 0)
-        form.addWidget(self.alarm_spin, 2, 1)
-        form.addWidget(QtWidgets.QLabel("输出目录"), 2, 2)
-        form.addWidget(self.output_edit, 2, 3)
+        form.addWidget(QtWidgets.QLabel("识别模式"), 1, 0)
+        form.addWidget(self.mode_combo, 1, 1)
+        form.addWidget(QtWidgets.QLabel("模型路径"), 2, 0)
+        form.addWidget(self.model_edit, 2, 1, 1, 3)
+        form.addWidget(QtWidgets.QLabel("报警秒数"), 3, 0)
+        form.addWidget(self.alarm_spin, 3, 1)
+        form.addWidget(QtWidgets.QLabel("输出目录"), 3, 2)
+        form.addWidget(self.output_edit, 3, 3)
         root.addLayout(form)
 
         self.video_label = QtWidgets.QLabel("等待前端画面")
@@ -597,6 +720,15 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
 
         self.setCentralWidget(central)
 
+    def _current_inference_mode(self) -> str:
+        return str(self.mode_combo.currentData() or INFERENCE_MODE_PERSON_VLM)
+
+    def _on_mode_changed(self) -> None:
+        if self._current_inference_mode() == INFERENCE_MODE_PERSON_VLM:
+            self.model_edit.setText(DEFAULT_PERSON_MODEL_PATH)
+        else:
+            self.model_edit.setText(DEFAULT_MODEL_PATH)
+
     def _set_running(self, running: bool) -> None:
         self.start_button.setEnabled(not running)
         self.stop_button.setEnabled(running)
@@ -628,6 +760,7 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
             model=self.model_edit.text().strip() or DEFAULT_MODEL_PATH,
             alarm_seconds=self.alarm_spin.value(),
             output_dir=self.output_edit.text().strip() or "output/alarms",
+            inference_mode=self._current_inference_mode(),
         )
         self.worker.frame_ready.connect(self._update_frame)
         self.worker.qwen_frame_ready.connect(self._handle_qwen_frame)
@@ -642,6 +775,7 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         self.qwen_settings = load_qwen_settings()
         self._qwen_last_upload_at = None
         self._qwen_in_flight = False
+        self._qwen_cooldown_until = 0.0
         self.worker.start()
 
     def stop_backend(self) -> None:
@@ -685,12 +819,14 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         self.qwen_settings = load_qwen_settings()
         self._qwen_last_upload_at = None
         self._qwen_in_flight = False
+        self._qwen_cooldown_until = 0.0
         self.local_worker = LocalMediaWorker(
             media_path=media_path,
             media_type=media_type,
             model=self.model_edit.text().strip() or DEFAULT_MODEL_PATH,
             alarm_seconds=self.alarm_spin.value(),
             output_dir=self.output_edit.text().strip() or "output/alarms",
+            inference_mode=self._current_inference_mode(),
         )
         self.local_worker.frame_ready.connect(self._update_frame)
         self.local_worker.qwen_frame_ready.connect(self._handle_qwen_frame)
@@ -728,8 +864,20 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         self._wait_for_qwen_worker()
         super().closeEvent(event)
 
-    def _handle_qwen_frame(self, frame, target_count: int) -> None:
+    def _handle_qwen_frame(self, frame, detections_or_count=None, *, target_count: int | None = None) -> None:
         now = time.monotonic()
+        if now < self._qwen_cooldown_until:
+            return
+
+        if target_count is not None:
+            detections = []
+        elif isinstance(detections_or_count, int):
+            detections: list[Detection] = []
+            target_count = detections_or_count
+        else:
+            detections = list(detections_or_count or [])
+            target_count = len(detections)
+
         if not should_upload_frame(
             now=now,
             last_upload_at=self._qwen_last_upload_at,
@@ -756,7 +904,13 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
 
         self._qwen_in_flight = True
         self.qwen_window.show_pending()
-        self.qwen_worker = QwenWorker(frame, self.qwen_settings, self)
+        self.qwen_worker = QwenWorker(
+            frame,
+            self.qwen_settings,
+            self,
+            detections=detections,
+            mode=self._current_inference_mode(),
+        )
         self.qwen_worker.succeeded.connect(self._show_qwen_result)
         self.qwen_worker.failed.connect(self._show_qwen_error)
         self.qwen_worker.finished.connect(self._on_qwen_worker_finished)
@@ -764,16 +918,25 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
 
     def _show_qwen_result(self, frame, result) -> None:
         self._qwen_in_flight = False
+        self._qwen_cooldown_until = 0.0
         self.qwen_window.show_result(frame, result)
-        self._append_log("千问分析完成")
+        if self._current_inference_mode() == INFERENCE_MODE_PERSON_VLM:
+            detections = qwen_result_to_detections(result)
+            analyzer = BehaviourAnalyzer(threshold_seconds=self.alarm_spin.value())
+            assessments, alarm = analyzer.update(detections, now_seconds=time.time())
+            overlay = draw_overlay(frame, assessments, alarm, fps=0.0, latency_ms=0)
+            self._update_frame(cv_frame_to_qimage(overlay))
+            self._update_counts(behaviour_counts(assessments))
+            self._update_alarm(frame_status_text(alarm), alarm.is_alarm)
+        self._append_log("大模型分析完成")
 
     def _show_qwen_error(self, frame, message: str) -> None:
         self._qwen_in_flight = False
+        self._qwen_cooldown_until = time.monotonic() + QWEN_ERROR_COOLDOWN_SECONDS
         self.qwen_window.show_error(frame, message)
         self._append_log(f"千问分析失败：{message}")
 
     def _on_qwen_worker_finished(self) -> None:
-        self._qwen_in_flight = False
         self.qwen_worker = None
 
     def _wait_for_qwen_worker(self) -> None:
