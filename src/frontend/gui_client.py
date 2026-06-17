@@ -8,6 +8,13 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 
 from src.common.image_codec import encode_jpeg, resize_to_width
 from src.common.protocol import send_packet
+from src.common.qt_dashboard_theme import (
+    apply_dashboard_style,
+    make_metric_card,
+    make_panel,
+    make_sidebar,
+    set_button_role,
+)
 
 
 _APP: QtWidgets.QApplication | None = None
@@ -142,9 +149,47 @@ class CameraClientWindow(QtWidgets.QMainWindow):
 
     def _build_ui(self) -> None:
         central = QtWidgets.QWidget(self)
-        root = QtWidgets.QVBoxLayout(central)
+        central.setObjectName("qtDashboardShell")
+        shell = QtWidgets.QHBoxLayout(central)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
+
+        self.sidebar = make_sidebar(
+            title="ClassBehave",
+            subtitle="TCP Sender",
+            active_label="▧ 发送端",
+            secondary_labels=["▣ 实时分析", "◇ 大模型", "◎ 日志设置"],
+            note="运行链路\n摄像头采集 -> NSGD TCP 帧包 -> 后端监听",
+        )
+        shell.addWidget(self.sidebar)
+
+        main = QtWidgets.QWidget(central)
+        main_layout = QtWidgets.QVBoxLayout(main)
+        main_layout.setContentsMargins(24, 24, 24, 24)
+        main_layout.setSpacing(18)
+        shell.addWidget(main, stretch=1)
+
+        topbar = QtWidgets.QHBoxLayout()
+        title_block = QtWidgets.QVBoxLayout()
+        eyebrow = QtWidgets.QLabel("双机课堂行为远程监测")
+        eyebrow.setObjectName("mutedText")
+        page_title = QtWidgets.QLabel("前端发送端")
+        page_title.setObjectName("pageTitle")
+        title_block.addWidget(eyebrow)
+        title_block.addWidget(page_title)
+        topbar.addLayout(title_block)
+        topbar.addStretch(1)
+        self.protocol_badge = QtWidgets.QLabel("NSGD TCP 帧包发送端")
+        self.protocol_badge.setObjectName("protocolBadge")
+        topbar.addWidget(self.protocol_badge)
+        main_layout.addLayout(topbar)
+
+        content = QtWidgets.QHBoxLayout()
+        content.setSpacing(18)
 
         form = QtWidgets.QGridLayout()
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(10)
         self.host_edit = QtWidgets.QLineEdit("127.0.0.1")
 
         self.port_spin = QtWidgets.QSpinBox()
@@ -180,39 +225,61 @@ class CameraClientWindow(QtWidgets.QMainWindow):
         form.addWidget(self.fps_spin, 2, 1)
         form.addWidget(QtWidgets.QLabel("JPEG 质量"), 2, 2)
         form.addWidget(self.quality_spin, 2, 3)
-        root.addLayout(form)
+        control_panel, control_layout = make_panel(
+            "发送控制",
+            "选择摄像头并设置 JPEG 帧参数，按自定义 TCP 协议发送到后端。",
+        )
+        control_layout.addLayout(form)
 
-        self.preview_label = QtWidgets.QLabel("本地预览")
+        self.start_button = QtWidgets.QPushButton("开始发送")
+        self.stop_button = QtWidgets.QPushButton("停止")
+        set_button_role(self.start_button, "primary")
+        set_button_role(self.stop_button, "danger")
+        self.start_button.clicked.connect(self.start_sender)
+        self.stop_button.clicked.connect(self.stop_sender)
+
+        buttons = QtWidgets.QHBoxLayout()
+        buttons.addWidget(self.start_button)
+        buttons.addWidget(self.stop_button)
+        control_layout.addLayout(buttons)
+        control_layout.addStretch(1)
+
+        preview_panel, preview_layout = make_panel(
+            "画面源",
+            "本地摄像头预览。实际传输仍使用 OpenCV 编码和 NSGD TCP 帧包。",
+        )
+        stage = QtWidgets.QFrame()
+        stage.setObjectName("darkStage")
+        stage_layout = QtWidgets.QVBoxLayout(stage)
+        stage_layout.setContentsMargins(0, 0, 0, 0)
+        self.preview_label = QtWidgets.QLabel("等待摄像头画面")
         self.preview_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setMinimumSize(640, 360)
-        self.preview_label.setStyleSheet("background: #111; color: #ddd;")
-        root.addWidget(self.preview_label, stretch=1)
+        self.preview_label.setStyleSheet("background: transparent; color: #d4d7d2;")
+        stage_layout.addWidget(self.preview_label)
+        preview_layout.addWidget(stage, stretch=1)
 
-        metrics = QtWidgets.QGridLayout()
+        content.addWidget(preview_panel, stretch=1)
+        content.addWidget(control_panel)
+        main_layout.addLayout(content, stretch=1)
+
         self.status_label = QtWidgets.QLabel("状态：未连接")
         self.fps_label = QtWidgets.QLabel("FPS：0.0")
         self.resolution_label = QtWidgets.QLabel("分辨率：-")
         self.frame_count_label = QtWidgets.QLabel("帧数：0")
         self.jpeg_size_label = QtWidgets.QLabel("JPEG：0 KB")
 
-        metrics.addWidget(self.status_label, 0, 0)
-        metrics.addWidget(self.fps_label, 0, 1)
-        metrics.addWidget(self.resolution_label, 0, 2)
-        metrics.addWidget(self.frame_count_label, 1, 0)
-        metrics.addWidget(self.jpeg_size_label, 1, 1)
-        root.addLayout(metrics)
-
-        buttons = QtWidgets.QHBoxLayout()
-        buttons.addStretch(1)
-        self.start_button = QtWidgets.QPushButton("开始发送")
-        self.stop_button = QtWidgets.QPushButton("停止")
-        self.start_button.clicked.connect(self.start_sender)
-        self.stop_button.clicked.connect(self.stop_sender)
-        buttons.addWidget(self.start_button)
-        buttons.addWidget(self.stop_button)
-        root.addLayout(buttons)
+        metrics = QtWidgets.QHBoxLayout()
+        metrics.setSpacing(10)
+        metrics.addWidget(make_metric_card("连接状态", self.status_label))
+        metrics.addWidget(make_metric_card("发送 FPS", self.fps_label))
+        metrics.addWidget(make_metric_card("分辨率", self.resolution_label))
+        metrics.addWidget(make_metric_card("帧数", self.frame_count_label))
+        metrics.addWidget(make_metric_card("JPEG 大小", self.jpeg_size_label))
+        main_layout.addLayout(metrics)
 
         self.setCentralWidget(central)
+        apply_dashboard_style(self)
 
     def _set_running(self, running: bool) -> None:
         self.start_button.setEnabled(not running)

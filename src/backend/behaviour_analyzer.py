@@ -7,8 +7,8 @@ ABNORMAL_LABELS = {"Useing-Phone", "Head-down", "Sleeping"}
 NORMAL_LABELS = {"Hand-raise", "Reading", "Writing"}
 LABEL_DISPLAY_NAMES = {
     "Hand-raise": "举手",
-    "Reading": "看书",
-    "Writing": "写字",
+    "Reading": "学习",
+    "Writing": "学习",
     "Useing-Phone": "使用手机",
     "Head-down": "低头",
     "Sleeping": "睡觉",

@@ -208,6 +208,12 @@ label 必须只能从以上六类中选择；不要输出 standing、sitting、l
 六类含义：Hand-raise=举手，Reading=看书，Writing=写字，Useing-Phone=使用手机，Head-down=低头，Sleeping=睡觉。
 Useing-Phone 优先：只要看到手机、手持小矩形屏幕、手里拿着手机、双手低头看小屏幕，必须标为 Useing-Phone；不要把看手机的人标为 Head-down、Writing 或 Reading。
 如果只是使用台式电脑、笔记本电脑、键盘、鼠标或显示器，不能因为有屏幕就标为 Useing-Phone。
+看不到手机或小屏幕时，不要仅因为低头就标为 Useing-Phone。
+只有清楚看到笔尖、握笔写字动作或纸面书写区域时，才标 Writing。
+只是在看纸张、书本、讲义或屏幕资料，没有明显写字动作时，标 Reading。
+低头但看不清是在读、写、看手机或睡觉时，标 Head-down。
+手臂明显高于肩部或头部，才标 Hand-raise；普通托腮、摸脸、拿东西不要标 Hand-raise。
+趴在桌面、闭眼或明显休息，才标 Sleeping；普通低头看桌面不要标 Sleeping。
 只返回编号和行为类别，不要返回 bbox 或坐标。"""
 
 

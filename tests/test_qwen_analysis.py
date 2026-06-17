@@ -440,6 +440,16 @@ def test_build_person_crop_prompt_requests_numbered_classification():
     assert "不要返回 bbox" in prompt
 
 
+def test_build_person_crop_prompt_distinguishes_ambiguous_phone_and_study_actions():
+    prompt = build_person_crop_prompt([1, 2])
+
+    assert "看不到手机或小屏幕时，不要仅因为低头就标为 Useing-Phone" in prompt
+    assert "只有清楚看到笔尖、握笔写字动作或纸面书写区域时，才标 Writing" in prompt
+    assert "只是在看纸张、书本、讲义或屏幕资料，没有明显写字动作时，标 Reading" in prompt
+    assert "手臂明显高于肩部或头部" in prompt
+    assert "趴在桌面、闭眼或明显休息" in prompt
+
+
 def test_call_person_crop_vision_posts_numbered_crop_prompt(monkeypatch):
     frame = np.zeros((40, 60, 3), dtype=np.uint8)
     settings = QwenSettings(

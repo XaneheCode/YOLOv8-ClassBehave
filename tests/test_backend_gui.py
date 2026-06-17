@@ -51,6 +51,10 @@ def test_backend_gui_defaults():
         assert window.video_test_button.text() == "选择视频测试"
         assert window.stop_test_button.text() == "停止测试"
         assert window.stop_test_button.isEnabled() is False
+        assert window.centralWidget().objectName() == "qtDashboardShell"
+        assert window.sidebar.objectName() == "dashboardSidebar"
+        assert "NSGD" in window.protocol_badge.text()
+        assert "TCP" in window.protocol_badge.text()
     finally:
         window.close()
         window.deleteLater()
@@ -69,7 +73,7 @@ def test_qwen_result_details_include_numbered_six_class_labels():
     details = format_qwen_result_details(result)
 
     assert "大模型概括：多名学生在教室内学习。" in details
-    assert "1. 类别：写字，坐标 [10, 20, 60, 110]，状态：坐在座位上，正在写字，置信度：high" in details
+    assert "1. 类别：学习，坐标 [10, 20, 60, 110]，状态：坐在座位上，正在写字，置信度：high" in details
     assert "2. 类别：低头，坐标 [100, 30, 160, 130]，状态：低头看向桌面，置信度：medium" in details
 
 
@@ -92,7 +96,7 @@ def test_backend_qwen_window_updates_result_and_status_separately():
         )
         qwen_window.show_result(np.zeros((40, 50, 3), dtype=np.uint8), result)
 
-        assert "类别：看书" in qwen_window.result_browser.toPlainText()
+        assert "类别：学习" in qwen_window.result_browser.toPlainText()
         assert "分析完成" in qwen_window.status_browser.toPlainText()
     finally:
         window.close()
@@ -145,7 +149,7 @@ def test_qwen_worker_person_mode_classifies_numbered_crop_grid(monkeypatch):
 def test_qwen_person_color_uses_six_class_palette():
     assert qwen_person_color("Hand-raise").getRgb()[:3] == (37, 99, 235)
     assert qwen_person_color("Reading").getRgb()[:3] == (22, 163, 74)
-    assert qwen_person_color("Writing").getRgb()[:3] == (8, 145, 178)
+    assert qwen_person_color("Writing").getRgb()[:3] == (22, 163, 74)
     assert qwen_person_color("Useing-Phone").getRgb()[:3] == (220, 38, 38)
     assert qwen_person_color("Head-down").getRgb()[:3] == (234, 88, 12)
     assert qwen_person_color("Sleeping").getRgb()[:3] == (147, 51, 234)
@@ -595,7 +599,7 @@ def test_local_image_worker_processes_one_frame_and_emits_display_updates(monkey
     assert len(qwen_frames[0][1]) == 1
     assert qwen_frames[0][1][0].label == "Reading"
     assert metrics == [("32x24", 1)]
-    assert counts[-1]["看书"] == 1
+    assert counts[-1]["学习"] == 1
     assert statuses[0] == "加载模型"
     assert "测试完成" in statuses[-1]
     assert alarms[-1][1] is False

@@ -30,6 +30,13 @@ from src.backend.qwen_analysis import (
 )
 from src.common.image_codec import decode_jpeg
 from src.common.protocol import recv_packet
+from src.common.qt_dashboard_theme import (
+    apply_dashboard_style,
+    make_metric_card,
+    make_panel,
+    make_sidebar,
+    set_button_role,
+)
 from src.common.types import Detection
 
 
@@ -41,7 +48,7 @@ QWEN_ERROR_COOLDOWN_SECONDS = 30
 QWEN_PERSON_COLORS = {
     "Hand-raise": (37, 99, 235),
     "Reading": (22, 163, 74),
-    "Writing": (8, 145, 178),
+    "Writing": (22, 163, 74),
     "Useing-Phone": (220, 38, 38),
     "Head-down": (234, 88, 12),
     "Sleeping": (147, 51, 234),
@@ -626,9 +633,44 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
 
     def _build_ui(self) -> None:
         central = QtWidgets.QWidget(self)
-        root = QtWidgets.QVBoxLayout(central)
+        central.setObjectName("qtDashboardShell")
+        shell = QtWidgets.QHBoxLayout(central)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
+
+        self.sidebar = make_sidebar(
+            title="ClassBehave",
+            subtitle="TCP Backend",
+            active_label="▣ 实时分析",
+            secondary_labels=["▧ 发送端", "◇ 大模型", "◎ 日志设置"],
+            note="正式双机链路\n前端采集 -> NSGD TCP -> 后端监听 -> YOLO/大模型",
+        )
+        shell.addWidget(self.sidebar)
+
+        main = QtWidgets.QWidget(central)
+        main_layout = QtWidgets.QVBoxLayout(main)
+        main_layout.setContentsMargins(24, 24, 24, 24)
+        main_layout.setSpacing(18)
+        shell.addWidget(main, stretch=1)
+
+        topbar = QtWidgets.QHBoxLayout()
+        title_block = QtWidgets.QVBoxLayout()
+        eyebrow = QtWidgets.QLabel("双机课堂行为远程监测")
+        eyebrow.setObjectName("mutedText")
+        page_title = QtWidgets.QLabel("后端分析端")
+        page_title.setObjectName("pageTitle")
+        title_block.addWidget(eyebrow)
+        title_block.addWidget(page_title)
+        topbar.addLayout(title_block)
+        topbar.addStretch(1)
+        self.protocol_badge = QtWidgets.QLabel("NSGD TCP 监听端")
+        self.protocol_badge.setObjectName("protocolBadge")
+        topbar.addWidget(self.protocol_badge)
+        main_layout.addLayout(topbar)
 
         form = QtWidgets.QGridLayout()
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(10)
         self.host_edit = QtWidgets.QLineEdit("0.0.0.0")
 
         self.port_spin = QtWidgets.QSpinBox()
@@ -661,15 +703,66 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         form.addWidget(self.alarm_spin, 3, 1)
         form.addWidget(QtWidgets.QLabel("输出目录"), 3, 2)
         form.addWidget(self.output_edit, 3, 3)
-        root.addLayout(form)
 
+        control_panel, control_layout = make_panel(
+            "监听与模型",
+            "后端保持 TCP socket 监听，按自定义 NSGD 帧包接收前端 JPEG 画面。",
+        )
+        control_layout.addLayout(form)
+
+        test_buttons = QtWidgets.QHBoxLayout()
+        self.image_test_button = QtWidgets.QPushButton("选择图片测试")
+        self.video_test_button = QtWidgets.QPushButton("选择视频测试")
+        self.stop_test_button = QtWidgets.QPushButton("停止测试")
+        set_button_role(self.image_test_button, "soft")
+        set_button_role(self.video_test_button, "soft")
+        set_button_role(self.stop_test_button, "danger")
+        self.image_test_button.clicked.connect(self.open_image_test)
+        self.video_test_button.clicked.connect(self.open_video_test)
+        self.stop_test_button.clicked.connect(self.stop_local_test)
+        test_buttons.addWidget(self.image_test_button)
+        test_buttons.addWidget(self.video_test_button)
+        test_buttons.addWidget(self.stop_test_button)
+        control_layout.addLayout(test_buttons)
+
+        listen_buttons = QtWidgets.QHBoxLayout()
+        listen_buttons.addStretch(1)
+        self.start_button = QtWidgets.QPushButton("开始监听")
+        self.stop_button = QtWidgets.QPushButton("停止")
+        set_button_role(self.start_button, "primary")
+        set_button_role(self.stop_button, "danger")
+        self.start_button.clicked.connect(self.start_backend)
+        self.stop_button.clicked.connect(self.stop_backend)
+        listen_buttons.addWidget(self.start_button)
+        listen_buttons.addWidget(self.stop_button)
+        control_layout.addLayout(listen_buttons)
+        control_layout.addStretch(1)
+        main_layout.addWidget(control_panel)
+
+        monitor_row = QtWidgets.QHBoxLayout()
+        monitor_row.setSpacing(18)
+
+        monitor_panel, monitor_layout = make_panel(
+            "分析画面",
+            "前端 TCP 画面、YOLO 人体框、大模型回填分类结果会在这里展示。",
+        )
+        stage = QtWidgets.QFrame()
+        stage.setObjectName("darkStage")
+        stage_layout = QtWidgets.QVBoxLayout(stage)
+        stage_layout.setContentsMargins(0, 0, 0, 0)
         self.video_label = QtWidgets.QLabel("等待前端画面")
         self.video_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.video_label.setMinimumSize(640, 360)
-        self.video_label.setStyleSheet("background: #111; color: #ddd;")
-        root.addWidget(self.video_label, stretch=1)
+        self.video_label.setStyleSheet("background: transparent; color: #d4d7d2;")
+        stage_layout.addWidget(self.video_label)
+        monitor_layout.addWidget(stage, stretch=1)
+        monitor_row.addWidget(monitor_panel, stretch=1)
 
-        metrics = QtWidgets.QGridLayout()
+        insight_panel, insight_layout = make_panel(
+            "运行状态",
+            "双机连接、检测性能、报警和行为计数。",
+        )
+
         self.status_label = QtWidgets.QLabel("状态：未监听")
         self.alarm_label = QtWidgets.QLabel("报警：normal")
         self.fps_label = QtWidgets.QLabel("FPS：0.0")
@@ -677,48 +770,38 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         self.frame_count_label = QtWidgets.QLabel("帧数：0")
         self.latency_label = QtWidgets.QLabel("延迟：0 ms")
 
-        metrics.addWidget(self.status_label, 0, 0)
-        metrics.addWidget(self.alarm_label, 0, 1)
-        metrics.addWidget(self.fps_label, 0, 2)
-        metrics.addWidget(self.resolution_label, 1, 0)
-        metrics.addWidget(self.frame_count_label, 1, 1)
-        metrics.addWidget(self.latency_label, 1, 2)
-        root.addLayout(metrics)
+        metric_grid = QtWidgets.QGridLayout()
+        metric_grid.setHorizontalSpacing(8)
+        metric_grid.setVerticalSpacing(8)
+        metric_grid.addWidget(make_metric_card("连接状态", self.status_label), 0, 0)
+        metric_grid.addWidget(make_metric_card("报警状态", self.alarm_label), 0, 1)
+        metric_grid.addWidget(make_metric_card("FPS", self.fps_label), 1, 0)
+        metric_grid.addWidget(make_metric_card("延迟", self.latency_label), 1, 1)
+        metric_grid.addWidget(make_metric_card("分辨率", self.resolution_label), 2, 0)
+        metric_grid.addWidget(make_metric_card("帧数", self.frame_count_label), 2, 1)
+        insight_layout.addLayout(metric_grid)
 
-        details = QtWidgets.QHBoxLayout()
         self.counts_text = QtWidgets.QTextEdit()
         self.counts_text.setReadOnly(True)
         self.counts_text.setPlaceholderText("行为计数")
         self.counts_text.setPlainText("暂无数据")
+        insight_layout.addWidget(self.counts_text)
+        monitor_row.addWidget(insight_panel)
+        main_layout.addLayout(monitor_row, stretch=1)
 
+        log_panel, log_layout = make_panel(
+            "日志设置",
+            "显示连接、检测、大模型和报警保存状态。",
+        )
         self.log_text = QtWidgets.QTextEdit()
         self.log_text.setReadOnly(True)
         self.log_text.setPlaceholderText("报警日志")
-
-        details.addWidget(self.counts_text)
-        details.addWidget(self.log_text)
-        root.addLayout(details)
-
-        buttons = QtWidgets.QHBoxLayout()
-        self.image_test_button = QtWidgets.QPushButton("选择图片测试")
-        self.video_test_button = QtWidgets.QPushButton("选择视频测试")
-        self.stop_test_button = QtWidgets.QPushButton("停止测试")
-        self.image_test_button.clicked.connect(self.open_image_test)
-        self.video_test_button.clicked.connect(self.open_video_test)
-        self.stop_test_button.clicked.connect(self.stop_local_test)
-        buttons.addWidget(self.image_test_button)
-        buttons.addWidget(self.video_test_button)
-        buttons.addWidget(self.stop_test_button)
-        buttons.addStretch(1)
-        self.start_button = QtWidgets.QPushButton("开始监听")
-        self.stop_button = QtWidgets.QPushButton("停止")
-        self.start_button.clicked.connect(self.start_backend)
-        self.stop_button.clicked.connect(self.stop_backend)
-        buttons.addWidget(self.start_button)
-        buttons.addWidget(self.stop_button)
-        root.addLayout(buttons)
+        self.log_text.setMaximumHeight(150)
+        log_layout.addWidget(self.log_text)
+        main_layout.addWidget(log_panel)
 
         self.setCentralWidget(central)
+        apply_dashboard_style(self)
 
     def _current_inference_mode(self) -> str:
         return str(self.mode_combo.currentData() or INFERENCE_MODE_PERSON_VLM)

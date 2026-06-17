@@ -20,8 +20,8 @@ DEFAULT_MODEL_PATH = "models/merged_classroom_6cls_v2_img960_e50_2026-06-13_best
 DENSE_OVERLAY_TARGET_THRESHOLD = 12
 LABEL_ABBREVIATIONS = {
     "Hand-raise": "Hand",
-    "Reading": "Read",
-    "Writing": "Write",
+    "Reading": "Learn",
+    "Writing": "Learn",
     "Useing-Phone": "Phone",
     "Head-down": "Head",
     "Sleeping": "Sleep",

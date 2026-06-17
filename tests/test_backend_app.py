@@ -43,7 +43,9 @@ def test_behaviour_counts_uses_yolov8_chinese_labels():
     counts = behaviour_counts(assessments)
 
     assert counts["睡觉"] == 1
-    assert counts["写字"] == 2
+    assert counts["学习"] == 2
+    assert "写字" not in counts
+    assert "看书" not in counts
     assert counts["举手"] == 0
 
 

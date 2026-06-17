@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>课堂行为监测 Web 控制台</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="主导航">
+        <div class="brand">
+          <div class="brand-mark">CB</div>
+          <div>
+            <div class="brand-title">ClassBehave</div>
+            <div class="brand-subtitle">Browser Suite</div>
+          </div>
+        </div>
+        <nav class="nav-stack">
+          <button class="nav-item active" type="button" data-view="sender"><span>▧</span>发送端</button>
+          <button class="nav-item" type="button" data-view="console"><span>▣</span>实时分析</button>
+          <button class="nav-item" type="button" data-view="vlm"><span>◇</span>大模型</button>
+          <button class="nav-item" type="button" data-view="logs"><span>◎</span>日志设置</button>
+        </nav>
+        <div class="sidebar-note">
+          <span class="note-label">运行链路</span>
+          <strong>发送端采集 → YOLO 控制台 → 大模型模块</strong>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">双机课堂行为远程监测</p>
+            <h1 id="viewTitle">浏览器发送端</h1>
+          </div>
+          <div class="topbar-actions">
+            <div class="status-pill" id="connectionPill">
+              <span class="pulse"></span>
+              <span id="connectionText">正在读取配置</span>
+            </div>
+            <button class="ghost-button" type="button" id="openAlarmDir">报警目录</button>
+          </div>
+        </header>
+
+        <section class="view-panel active" data-view-panel="sender" aria-label="浏览器发送端">
+          <div class="module-heading">
+            <div>
+              <h2>发送端</h2>
+              <p>采集浏览器摄像头、图片或视频帧，并发送到后端 YOLO 分析接口。</p>
+            </div>
+            <div class="module-status" id="senderStatus">待机</div>
+          </div>
+
+          <div class="sender-grid">
+            <article class="panel sender-panel">
+              <div class="panel-header">
+                <div>
+                  <h2>画面源</h2>
+                  <p id="sourceLabel">等待选择摄像头、图片或视频</p>
+                </div>
+                <div class="mini-metrics">
+                  <span id="senderResolution">--</span>
+                  <span id="senderFrames">0 帧</span>
+                </div>
+              </div>
+              <div class="source-stage">
+                <img id="sourcePreviewImage" alt="发送端预览画面" />
+                <div class="empty-stage" id="sourceEmpty">
+                  <div class="stage-icon">▧</div>
+                  <strong>等待画面输入</strong>
+                  <span>启动摄像头、上传图片或上传视频后开始发送</span>
+                </div>
+              </div>
+            </article>
+
+            <aside class="panel sender-controls">
+              <h2>发送控制</h2>
+              <div class="field-list">
+                <div class="camera-row">
+                  <label>
+                    <span>摄像头</span>
+                    <select id="cameraSelect">
+                      <option value="">默认摄像头</option>
+                    </select>
+                  </label>
+                  <button class="ghost-button small" type="button" id="refreshCameras">刷新</button>
+                </div>
+                <label>
+                  <span>发送间隔</span>
+                  <input id="sendInterval" type="number" min="0.3" max="10" step="0.1" value="1" />
+                </label>
+                <label>
+                  <span>上传宽度</span>
+                  <input id="captureWidth" type="number" min="320" max="1920" step="40" value="1280" />
+                </label>
+                <label>
+                  <span>JPEG 质量</span>
+                  <input id="jpegQuality" type="number" min="40" max="100" step="5" value="86" />
+                </label>
+              </div>
+              <div class="button-grid">
+                <input id="imageInput" type="file" accept="image/*" hidden />
+                <input id="videoInput" type="file" accept="video/*" hidden />
+                <button class="primary-button" type="button" id="startCamera">启动摄像头</button>
+                <button class="soft-button" type="button" id="pickImage">上传图片</button>
+                <button class="soft-button" type="button" id="pickVideo">上传视频</button>
+                <button class="danger-button" type="button" id="stopSource" disabled>停止发送</button>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view-panel" data-view-panel="console" aria-label="YOLO 实时分析控制台">
+          <div class="module-heading">
+            <div>
+              <h2>实时分析控制台</h2>
+              <p>这里只展示 YOLO 实时分析结果。大模型分类不会覆盖本画面。</p>
+            </div>
+            <div class="module-status" id="yoloStatus">等待帧</div>
+          </div>
+
+          <section class="control-surface" aria-label="YOLO 控制区">
+            <div class="mode-group" role="group" aria-label="YOLO 模式">
+              <button class="mode-button active" type="button" data-mode="person_vlm">人体检测</button>
+              <button class="mode-button" type="button" data-mode="behaviour_yolo">六类 YOLO</button>
+              <button class="mode-button" type="button" data-mode="person_only">仅人体检测</button>
+            </div>
+            <div class="field-grid">
+              <label>
+                <span>YOLO 模型路径</span>
+                <input id="modelPath" value="yolov8s.pt" />
+              </label>
+              <label>
+                <span>报警秒数</span>
+                <input id="alarmSeconds" type="number" min="1" max="30" step="0.5" value="3" />
+              </label>
+              <label>
+                <span>后端阶段</span>
+                <input id="yoloEndpoint" value="/api/yolo-frame" readonly />
+              </label>
+            </div>
+          </section>
+
+          <section class="monitor-grid">
+            <article class="panel monitor-panel">
+              <div class="panel-header">
+                <div>
+                  <h2>YOLO 画面</h2>
+                  <p>人体框或六类 YOLO 框</p>
+                </div>
+                <div class="mini-metrics">
+                  <span id="resolutionMetric">--</span>
+                  <span id="latencyMetric">0 ms</span>
+                  <span id="fpsMetric">0.0 FPS</span>
+                </div>
+              </div>
+              <div class="video-stage">
+                <img id="overlayImage" alt="YOLO 实时分析画面" />
+                <div class="empty-stage">
+                  <div class="stage-icon">▦</div>
+                  <strong>等待 YOLO 分析结果</strong>
+                  <span>请先在发送端启动输入</span>
+                </div>
+              </div>
+            </article>
+
+            <aside class="panel insight-panel">
+              <div class="alarm-strip" id="alarmStrip">
+                <span class="strip-label">YOLO 状态</span>
+                <strong id="alarmText">未开始</strong>
+                <small id="alarmDetail">没有分析帧</small>
+              </div>
+              <div class="metric-stack">
+                <div class="metric-row">
+                  <span>YOLO 目标</span>
+                  <strong id="targetCount">0</strong>
+                </div>
+                <div class="metric-row">
+                  <span>异常人数</span>
+                  <strong id="abnormalCount">0</strong>
+                </div>
+                <div class="metric-row">
+                  <span>帧数</span>
+                  <strong id="frameCount">0</strong>
+                </div>
+              </div>
+              <div class="counts-list" id="countsList" aria-label="YOLO 行为计数"></div>
+            </aside>
+          </section>
+        </section>
+
+        <section class="view-panel" data-view-panel="vlm" aria-label="大模型分析模块">
+          <div class="module-heading">
+            <div>
+              <h2>大模型分析模块</h2>
+              <p>基于 YOLO 人体框生成编号拼图，并只在此处展示大模型分类结果。</p>
+            </div>
+            <div class="module-status" id="visionStatus">等待上传</div>
+          </div>
+
+          <section class="control-surface vlm-controls" aria-label="大模型控制区">
+            <label class="switch-row">
+              <input id="useVision" type="checkbox" checked />
+              <span>启用大模型分类</span>
+            </label>
+            <div class="field-grid compact">
+              <label>
+                <span>大模型间隔</span>
+                <input id="uploadInterval" type="number" min="1" max="60" step="1" value="10" />
+              </label>
+              <label>
+                <span>接口阶段</span>
+                <input value="/api/vlm-frame" readonly />
+              </label>
+              <label>
+                <span>提供方</span>
+                <input id="providerText" value="--" readonly />
+              </label>
+            </div>
+          </section>
+
+          <section class="analysis-grid single">
+            <article class="panel vlm-panel">
+              <div class="panel-header">
+                <div>
+                  <h2>编号人体拼图</h2>
+                  <p id="visionMessage">等待 YOLO 人体框</p>
+                </div>
+                <span class="provider-chip" id="providerChip">provider --</span>
+              </div>
+              <div class="vlm-layout">
+                <div class="crop-preview">
+                  <img id="gridImage" alt="编号人体拼图" />
+                  <div class="crop-empty">编号人体拼图将在这里显示</div>
+                </div>
+                <div class="analysis-copy">
+                  <h3>大模型分类结果</h3>
+                  <p id="visionSummary">暂无结果</p>
+                  <div class="people-list" id="peopleList"></div>
+                </div>
+              </div>
+            </article>
+
+            <article class="panel monitor-panel">
+              <div class="panel-header">
+                <div>
+                  <h2>大模型回填画面</h2>
+                  <p>只显示大模型行为分类后的结果</p>
+                </div>
+                <div class="mini-metrics">
+                  <span id="visionResolution">--</span>
+                  <span id="visionLatency">0 ms</span>
+                  <span id="visionFps">0.0 FPS</span>
+                </div>
+              </div>
+              <div class="video-stage vision-stage">
+                <img id="visionOverlayImage" alt="大模型行为分类画面" />
+                <div class="empty-stage">
+                  <div class="stage-icon">◇</div>
+                  <strong>等待大模型结果</strong>
+                  <span>该画面不会影响 YOLO 控制台</span>
+                </div>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view-panel" data-view-panel="logs" aria-label="日志与设置">
+          <div class="module-heading">
+            <div>
+              <h2>日志与设置</h2>
+              <p>查看上传、YOLO 分析、大模型分析和错误状态。</p>
+            </div>
+            <button class="ghost-button small" type="button" id="clearLog">清空</button>
+          </div>
+          <article class="panel log-panel wide">
+            <div class="log-list" id="logList"></div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <video id="sourceVideo" playsinline muted hidden></video>
+    <canvas id="captureCanvas" hidden></canvas>
+    <script src="/app.js"></script>
+  </body>
+</html>
