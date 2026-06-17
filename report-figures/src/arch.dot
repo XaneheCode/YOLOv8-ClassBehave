@@ -1,0 +1,24 @@
+digraph architecture {
+  graph [charset="UTF-8", rankdir=LR, splines=ortho, nodesep=0.35, ranksep=0.6, fontname="WenQuanYi Zen Hei", bgcolor="white"];
+  node  [fontname="WenQuanYi Zen Hei", shape=box, style="rounded,filled", color="#9aa7b4", fillcolor="#eef3fb", fontsize=12, margin="0.18,0.10"];
+  edge  [fontname="WenQuanYi Zen Hei", color="#5b6b7b", fontsize=10];
+
+  subgraph cluster_front {
+    label="前端笔记本（采集发送）"; fontname="WenQuanYi Zen Hei"; color="#2f6fed"; style="rounded"; bgcolor="#f5f9ff";
+    A1 [label="摄像头采集"]; A2 [label="图像缩放"]; A3 [label="JPEG 编码"]; A4 [label="NSGD 帧打包", fillcolor="#dbe8ff"];
+    A1 -> A2 -> A3 -> A4;
+  }
+
+  subgraph cluster_back {
+    label="后端笔记本（接收分析）"; fontname="WenQuanYi Zen Hei"; color="#16a34a"; style="rounded"; bgcolor="#f4fbf6";
+    B1 [label="TCP 监听收包", fillcolor="#dcfce7"]; B2 [label="拆包/粘包处理"]; B3 [label="JPEG 解码"];
+    B4 [label="YOLOv8 人体检测", fillcolor="#dbe8ff"]; B5 [label="编号拼图\n+大模型行为分类", fillcolor="#ede9fe"];
+    B6 [label="六类 YOLO\n(回退方案)", fillcolor="#fff4d6"];
+    B7 [label="多帧研判/异常标红"]; B8 [label="报警提示"]; B9 [label="截图+CSV 日志"];
+    B1 -> B2 -> B3 -> B4 -> B5 -> B7;
+    B3 -> B6 -> B7 [style=dashed];
+    B7 -> B8; B7 -> B9;
+  }
+
+  A4 -> B1 [label="  TCP / 无线局域网  ", color="#2f6fed", penwidth=2, fontcolor="#2f6fed"];
+}

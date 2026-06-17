@@ -1,0 +1,24 @@
+digraph fusion {
+  graph [charset="UTF-8", rankdir=TB, nodesep=0.45, ranksep=0.5, fontname="WenQuanYi Zen Hei", bgcolor="white"];
+  node  [fontname="WenQuanYi Zen Hei", fontsize=12];
+  edge  [fontname="WenQuanYi Zen Hei", color="#5b6b7b", fontsize=10];
+
+  G [label="GPT-5.5 分类结果", shape=box, style="rounded,filled", fillcolor="#dcfce7", color="#16a34a"];
+  Q [label="千问分类结果", shape=box, style="rounded,filled", fillcolor="#fff4d6", color="#f59e0b"];
+
+  D1 [label="GPT 是否判为\nHead-down（低头）？", shape=diamond, style="filled", fillcolor="#eef3fb", color="#9aa7b4"];
+  D2 [label="千问是否判为 Useing-Phone\n且给出手机/小屏幕证据？", shape=diamond, style="filled", fillcolor="#eef3fb", color="#9aa7b4"];
+
+  O1 [label="采纳千问：使用手机", shape=box, style="rounded,filled", fillcolor="#fde2e1", color="#ef4444"];
+  O2 [label="保留 GPT 结果", shape=box, style="rounded,filled", fillcolor="#dbe8ff", color="#2f6fed"];
+
+  G -> D1;
+  Q -> D2 [style=dashed];
+  D1 -> D2 [label="  是  "];
+  D1 -> O2 [label="  否（含写字/看书等）  "];
+  D2 -> O1 [label="  是  "];
+  D2 -> O2 [label="  否  "];
+
+  note [label="原则：以 GPT 为主；仅在 GPT 判低头时才允许千问的手机证据覆盖，\n不允许覆盖 GPT 的写字/看书，避免大量伏案写字被误报为手机。",
+        shape=note, style="filled", fillcolor="#f7f7f7", color="#9aa7b4", fontsize=10];
+}

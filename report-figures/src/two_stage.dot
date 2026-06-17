@@ -1,0 +1,31 @@
+digraph two_stage {
+  graph [charset="UTF-8", rankdir=TB, nodesep=0.4, ranksep=0.55, fontname="WenQuanYi Zen Hei", bgcolor="white"];
+  node  [fontname="WenQuanYi Zen Hei", shape=box, style="rounded,filled", color="#9aa7b4", fontsize=12, margin="0.2,0.11"];
+  edge  [fontname="WenQuanYi Zen Hei", color="#5b6b7b"];
+
+  P0 [label="课堂整帧图像", fillcolor="#eef3fb"];
+
+  subgraph cluster_s1 {
+    label="第一阶段：YOLOv8 人体检测（稳定定位）"; fontname="WenQuanYi Zen Hei"; color="#2f6fed"; bgcolor="#f5f9ff"; style="rounded";
+    P1 [label="仅检测 person 人体框", fillcolor="#dbe8ff"];
+    P2 [label="人体框按 0.2 比例外扩裁剪"];
+    P3 [label="缩放贴入 224×224 编号瓦片"];
+    P4 [label="按 4 列拼成编号大图", fillcolor="#dbe8ff"];
+    P1 -> P2 -> P3 -> P4;
+  }
+
+  subgraph cluster_s2 {
+    label="第二阶段：视觉大模型行为分类（强语义）"; fontname="WenQuanYi Zen Hei"; color="#8b5cf6"; bgcolor="#f7f5ff"; style="rounded";
+    Q1 [label="上传大模型\nGPT-5.5 / 通义千问", fillcolor="#ede9fe"];
+    Q2 [label="返回每个编号的六类行为"];
+    Q3 [label="多模型融合校正", fillcolor="#ede9fe"];
+    Q1 -> Q2 -> Q3;
+  }
+
+  R1 [label="按编号回填到原图人体框"];
+  R2 [label="行为研判 / 报警 / 显示", fillcolor="#dcfce7"];
+
+  P0 -> P1;
+  P4 -> Q1 [label="  编号拼图  ", fontcolor="#8b5cf6", color="#8b5cf6", penwidth=2];
+  Q3 -> R1 -> R2;
+}

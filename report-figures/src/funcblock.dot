@@ -1,0 +1,21 @@
+digraph funcblock {
+  graph [charset="UTF-8", rankdir=LR, compound=true, nodesep=0.25, ranksep=0.7, fontname="WenQuanYi Zen Hei", bgcolor="white"];
+  node  [fontname="WenQuanYi Zen Hei", shape=box, style="rounded,filled", color="#9aa7b4", fillcolor="#eef3fb", fontsize=11, margin="0.14,0.08"];
+  edge  [fontname="WenQuanYi Zen Hei", color="#5b6b7b"];
+
+  subgraph cluster_a { label="采集子系统（前端）"; color="#2f6fed"; style=rounded; bgcolor="#f5f9ff";
+    A1[label="摄像头采集"]; A2[label="图像缩放"]; A3[label="JPEG 编码"]; A1->A2->A3; }
+  subgraph cluster_b { label="传输子系统（网络）"; color="#2f6fed"; style=rounded; bgcolor="#f5f9ff";
+    B1[label="NSGD 帧打包"]; B2[label="TCP 发送"]; B3[label="TCP 收包/拆包"]; B4[label="帧校验与解码"]; B1->B2->B3->B4; }
+  subgraph cluster_c { label="识别子系统（后端）"; color="#8b5cf6"; style=rounded; bgcolor="#f7f5ff";
+    C1[label="YOLOv8 人体检测"]; C2[label="编号拼图"]; C3[label="大模型行为分类"]; C4[label="六类 YOLO 回退", fillcolor="#fff4d6"]; C1->C2->C3; C1->C4[style=dashed]; }
+  subgraph cluster_d { label="研判与报警"; color="#ef4444"; style=rounded; bgcolor="#fff6f6";
+    D1[label="多帧连续研判"]; D2[label="异常目标标红"]; D3[label="阈值报警"]; D1->D2->D3; }
+  subgraph cluster_e { label="展示与记录"; color="#16a34a"; style=rounded; bgcolor="#f4fbf6";
+    E1[label="Qt/Web 可视化"]; E2[label="报警截图"]; E3[label="CSV 日志"]; E1->E2->E3; }
+
+  A3 -> B1 [ltail=cluster_a, lhead=cluster_b, penwidth=2, color="#2f6fed"];
+  B4 -> C1 [ltail=cluster_b, lhead=cluster_c, penwidth=2, color="#8b5cf6"];
+  C3 -> D1 [ltail=cluster_c, lhead=cluster_d, penwidth=2, color="#ef4444"];
+  D3 -> E1 [ltail=cluster_d, lhead=cluster_e, penwidth=2, color="#16a34a"];
+}
