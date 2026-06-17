@@ -204,6 +204,27 @@ def test_load_openai_compatible_settings_from_environment():
     {
         "VISION_PROVIDER": "openai",
         "OPENAI_API_KEY": "openai-key",
+        "OPENAI_VISION_MODEL": "gpt-5.5",
+        "DASHSCOPE_API_KEY": "qwen-key",
+        "QWEN_VL_MODEL": "qwen3.6-flash",
+        "QWEN_MAX_YOLO_TARGETS": "30",
+    },
+    clear=True,
+)
+def test_load_settings_can_force_dashscope_provider():
+    settings = load_qwen_settings(provider="dashscope")
+
+    assert settings.provider == "dashscope"
+    assert settings.api_key == "qwen-key"
+    assert settings.model == "qwen3.6-flash"
+    assert settings.max_yolo_targets == 30
+
+
+@mock.patch.dict(
+    os.environ,
+    {
+        "VISION_PROVIDER": "openai",
+        "OPENAI_API_KEY": "openai-key",
     },
     clear=True,
 )

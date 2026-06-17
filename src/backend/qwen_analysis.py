@@ -128,8 +128,8 @@ def _read_openai_image_format() -> str:
     return "png"
 
 
-def load_qwen_settings() -> QwenSettings:
-    provider = os.getenv("VISION_PROVIDER", os.getenv("QWEN_PROVIDER", "dashscope")).strip().lower()
+def load_qwen_settings(provider: str | None = None) -> QwenSettings:
+    provider = (provider or os.getenv("VISION_PROVIDER", os.getenv("QWEN_PROVIDER", "dashscope"))).strip().lower()
     if provider in {"openai", "openai-compatible", "openai_compatible"}:
         return QwenSettings(
             api_key=os.getenv("OPENAI_API_KEY", "").strip(),

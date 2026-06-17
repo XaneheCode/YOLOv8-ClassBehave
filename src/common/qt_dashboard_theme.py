@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PyQt6 import QtCore, QtWidgets
+from PyQt6 import QtWidgets
 
 
 DASHBOARD_STYLESHEET = """
@@ -11,10 +11,6 @@ QWidget {
 }
 QLabel {
     background: transparent;
-}
-QFrame#dashboardSidebar {
-    background: #fbfcf8;
-    border-right: 1px solid #d9dfd4;
 }
 QFrame#dashboardPanel, QFrame#metricCard, QFrame#statusPill {
     background: rgba(255, 255, 255, 0.96);
@@ -38,15 +34,15 @@ QLabel#brandSubtitle, QLabel#mutedText, QLabel#metricLabel {
     color: #667085;
 }
 QLabel#pageTitle {
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 900;
 }
 QLabel#sectionTitle {
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 850;
 }
 QLabel#metricValue {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 850;
 }
 QLabel#protocolBadge {
@@ -57,20 +53,8 @@ QLabel#protocolBadge {
     padding: 8px 10px;
     font-weight: 850;
 }
-QLabel#navItem {
-    color: #667085;
-    padding: 10px 12px;
-    border-radius: 8px;
-}
-QLabel#navItemActive {
-    color: #ffffff;
-    background: #23272f;
-    padding: 10px 12px;
-    border-radius: 8px;
-    font-weight: 800;
-}
 QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
-    min-height: 34px;
+    min-height: 30px;
     border: 1px solid #d9dfd4;
     border-radius: 7px;
     background: #ffffff;
@@ -83,7 +67,7 @@ QTextEdit, QTextBrowser {
     padding: 8px;
 }
 QPushButton {
-    min-height: 36px;
+    min-height: 32px;
     border: 1px solid #d9dfd4;
     border-radius: 7px;
     background: #ffffff;
@@ -122,55 +106,12 @@ def label(text: str, object_name: str = "") -> QtWidgets.QLabel:
     return widget
 
 
-def make_sidebar(
-    title: str,
-    subtitle: str,
-    active_label: str,
-    secondary_labels: list[str],
-    note: str,
-) -> QtWidgets.QFrame:
-    sidebar = QtWidgets.QFrame()
-    sidebar.setObjectName("dashboardSidebar")
-    sidebar.setFixedWidth(230)
-    layout = QtWidgets.QVBoxLayout(sidebar)
-    layout.setContentsMargins(18, 22, 18, 18)
-    layout.setSpacing(16)
-
-    brand_row = QtWidgets.QHBoxLayout()
-    mark = label("CB", "brandMark")
-    mark.setFixedSize(42, 42)
-    mark.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-    brand_text = QtWidgets.QVBoxLayout()
-    brand_text.setSpacing(2)
-    brand_text.addWidget(label(title, "brandTitle"))
-    brand_text.addWidget(label(subtitle, "brandSubtitle"))
-    brand_row.addWidget(mark)
-    brand_row.addLayout(brand_text)
-    layout.addLayout(brand_row)
-
-    nav = QtWidgets.QVBoxLayout()
-    nav.setSpacing(8)
-    active = label(active_label, "navItemActive")
-    nav.addWidget(active)
-    for item in secondary_labels:
-        nav.addWidget(label(item, "navItem"))
-    layout.addLayout(nav)
-
-    layout.addStretch(1)
-    note_label = label(note, "mutedText")
-    note_label.setWordWrap(True)
-    note_label.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
-    note_label.setContentsMargins(10, 10, 10, 10)
-    layout.addWidget(note_label)
-    return sidebar
-
-
 def make_panel(title: str, subtitle: str = "") -> tuple[QtWidgets.QFrame, QtWidgets.QVBoxLayout]:
     panel = QtWidgets.QFrame()
     panel.setObjectName("dashboardPanel")
     panel_layout = QtWidgets.QVBoxLayout(panel)
-    panel_layout.setContentsMargins(14, 14, 14, 14)
-    panel_layout.setSpacing(12)
+    panel_layout.setContentsMargins(10, 10, 10, 10)
+    panel_layout.setSpacing(8)
 
     header = QtWidgets.QVBoxLayout()
     header.setSpacing(4)

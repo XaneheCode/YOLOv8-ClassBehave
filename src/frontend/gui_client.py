@@ -12,7 +12,6 @@ from src.common.qt_dashboard_theme import (
     apply_dashboard_style,
     make_metric_card,
     make_panel,
-    make_sidebar,
     set_button_role,
 )
 
@@ -150,27 +149,29 @@ class CameraClientWindow(QtWidgets.QMainWindow):
     def _build_ui(self) -> None:
         central = QtWidgets.QWidget(self)
         central.setObjectName("qtDashboardShell")
-        shell = QtWidgets.QHBoxLayout(central)
-        shell.setContentsMargins(0, 0, 0, 0)
-        shell.setSpacing(0)
+        root_layout = QtWidgets.QVBoxLayout(central)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        self.page_scroll = QtWidgets.QScrollArea(central)
+        self.page_scroll.setObjectName("dashboardScroll")
+        self.page_scroll.setWidgetResizable(True)
+        self.page_scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        self.page_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        root_layout.addWidget(self.page_scroll)
 
-        self.sidebar = make_sidebar(
-            title="ClassBehave",
-            subtitle="TCP Sender",
-            active_label="▧ 发送端",
-            secondary_labels=["▣ 实时分析", "◇ 大模型", "◎ 日志设置"],
-            note="运行链路\n摄像头采集 -> NSGD TCP 帧包 -> 后端监听",
-        )
-        shell.addWidget(self.sidebar)
-
-        main = QtWidgets.QWidget(central)
-        main_layout = QtWidgets.QVBoxLayout(main)
-        main_layout.setContentsMargins(24, 24, 24, 24)
-        main_layout.setSpacing(18)
-        shell.addWidget(main, stretch=1)
+        page = QtWidgets.QWidget(self.page_scroll)
+        main_layout = QtWidgets.QVBoxLayout(page)
+        main_layout.setContentsMargins(16, 14, 16, 14)
+        main_layout.setSpacing(10)
 
         topbar = QtWidgets.QHBoxLayout()
+        topbar.setSpacing(12)
+        brand_mark = QtWidgets.QLabel("CB")
+        brand_mark.setObjectName("brandMark")
+        brand_mark.setFixedSize(42, 42)
+        brand_mark.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        topbar.addWidget(brand_mark)
         title_block = QtWidgets.QVBoxLayout()
+        title_block.setSpacing(1)
         eyebrow = QtWidgets.QLabel("双机课堂行为远程监测")
         eyebrow.setObjectName("mutedText")
         page_title = QtWidgets.QLabel("前端发送端")
@@ -185,7 +186,7 @@ class CameraClientWindow(QtWidgets.QMainWindow):
         main_layout.addLayout(topbar)
 
         content = QtWidgets.QHBoxLayout()
-        content.setSpacing(18)
+        content.setSpacing(12)
 
         form = QtWidgets.QGridLayout()
         form.setHorizontalSpacing(10)
@@ -229,6 +230,7 @@ class CameraClientWindow(QtWidgets.QMainWindow):
             "发送控制",
             "选择摄像头并设置 JPEG 帧参数，按自定义 TCP 协议发送到后端。",
         )
+        control_panel.setMaximumWidth(420)
         control_layout.addLayout(form)
 
         self.start_button = QtWidgets.QPushButton("开始发送")
@@ -254,7 +256,7 @@ class CameraClientWindow(QtWidgets.QMainWindow):
         stage_layout.setContentsMargins(0, 0, 0, 0)
         self.preview_label = QtWidgets.QLabel("等待摄像头画面")
         self.preview_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.preview_label.setMinimumSize(640, 360)
+        self.preview_label.setMinimumSize(480, 270)
         self.preview_label.setStyleSheet("background: transparent; color: #d4d7d2;")
         stage_layout.addWidget(self.preview_label)
         preview_layout.addWidget(stage, stretch=1)
@@ -270,7 +272,7 @@ class CameraClientWindow(QtWidgets.QMainWindow):
         self.jpeg_size_label = QtWidgets.QLabel("JPEG：0 KB")
 
         metrics = QtWidgets.QHBoxLayout()
-        metrics.setSpacing(10)
+        metrics.setSpacing(8)
         metrics.addWidget(make_metric_card("连接状态", self.status_label))
         metrics.addWidget(make_metric_card("发送 FPS", self.fps_label))
         metrics.addWidget(make_metric_card("分辨率", self.resolution_label))
@@ -278,6 +280,7 @@ class CameraClientWindow(QtWidgets.QMainWindow):
         metrics.addWidget(make_metric_card("JPEG 大小", self.jpeg_size_label))
         main_layout.addLayout(metrics)
 
+        self.page_scroll.setWidget(page)
         self.setCentralWidget(central)
         apply_dashboard_style(self)
 

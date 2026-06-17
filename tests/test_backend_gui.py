@@ -52,9 +52,13 @@ def test_backend_gui_defaults():
         assert window.stop_test_button.text() == "停止测试"
         assert window.stop_test_button.isEnabled() is False
         assert window.centralWidget().objectName() == "qtDashboardShell"
-        assert window.sidebar.objectName() == "dashboardSidebar"
+        assert window.page_scroll.objectName() == "dashboardScroll"
+        assert window.page_scroll.widgetResizable() is True
+        assert window.findChildren(QtWidgets.QFrame, "dashboardSidebar") == []
         assert "NSGD" in window.protocol_badge.text()
         assert "TCP" in window.protocol_badge.text()
+        assert window.log_text.maximumHeight() <= 96
+        assert window.video_label.minimumHeight() <= 260
     finally:
         window.close()
         window.deleteLater()
@@ -112,6 +116,36 @@ def test_mode_selector_switches_between_person_and_six_class_models():
 
         window.mode_combo.setCurrentIndex(0)
         assert window.model_edit.text() == DEFAULT_PERSON_MODEL_PATH
+    finally:
+        window.close()
+        window.deleteLater()
+
+
+def test_backend_gui_selects_large_model_and_target_limit(monkeypatch):
+    monkeypatch.setenv("VISION_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.setenv("OPENAI_VISION_MODEL", "gpt-5.5")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "qwen-key")
+    monkeypatch.setenv("QWEN_VL_MODEL", "qwen3.6-flash")
+    monkeypatch.setenv("QWEN_MAX_YOLO_TARGETS", "30")
+
+    _app()
+    window = BackendMonitorWindow()
+    try:
+        assert window.vision_model_combo.currentData() == "openai"
+        assert "GPT-5.5" in window.vision_model_combo.currentText()
+        assert window.vision_target_spin.value() == 30
+
+        qwen_index = window.vision_model_combo.findData("dashscope")
+        window.vision_model_combo.setCurrentIndex(qwen_index)
+        window.vision_target_spin.setValue(42)
+
+        settings = window._selected_qwen_settings()
+
+        assert settings.provider == "dashscope"
+        assert settings.api_key == "qwen-key"
+        assert settings.model == "qwen3.6-flash"
+        assert settings.max_yolo_targets == 42
     finally:
         window.close()
         window.deleteLater()

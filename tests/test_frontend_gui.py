@@ -28,7 +28,9 @@ def test_frontend_gui_defaults():
         assert "未连接" in window.status_label.text()
         assert window.stop_button.isEnabled() is False
         assert window.centralWidget().objectName() == "qtDashboardShell"
-        assert window.sidebar.objectName() == "dashboardSidebar"
+        assert window.page_scroll.objectName() == "dashboardScroll"
+        assert window.page_scroll.widgetResizable() is True
+        assert window.findChildren(QtWidgets.QFrame, "dashboardSidebar") == []
         assert "NSGD" in window.protocol_badge.text()
         assert "TCP" in window.protocol_badge.text()
     finally:

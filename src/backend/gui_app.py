@@ -34,7 +34,6 @@ from src.common.qt_dashboard_theme import (
     apply_dashboard_style,
     make_metric_card,
     make_panel,
-    make_sidebar,
     set_button_role,
 )
 from src.common.types import Detection
@@ -634,27 +633,29 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
     def _build_ui(self) -> None:
         central = QtWidgets.QWidget(self)
         central.setObjectName("qtDashboardShell")
-        shell = QtWidgets.QHBoxLayout(central)
-        shell.setContentsMargins(0, 0, 0, 0)
-        shell.setSpacing(0)
+        root_layout = QtWidgets.QVBoxLayout(central)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        self.page_scroll = QtWidgets.QScrollArea(central)
+        self.page_scroll.setObjectName("dashboardScroll")
+        self.page_scroll.setWidgetResizable(True)
+        self.page_scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        self.page_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        root_layout.addWidget(self.page_scroll)
 
-        self.sidebar = make_sidebar(
-            title="ClassBehave",
-            subtitle="TCP Backend",
-            active_label="▣ 实时分析",
-            secondary_labels=["▧ 发送端", "◇ 大模型", "◎ 日志设置"],
-            note="正式双机链路\n前端采集 -> NSGD TCP -> 后端监听 -> YOLO/大模型",
-        )
-        shell.addWidget(self.sidebar)
-
-        main = QtWidgets.QWidget(central)
-        main_layout = QtWidgets.QVBoxLayout(main)
-        main_layout.setContentsMargins(24, 24, 24, 24)
-        main_layout.setSpacing(18)
-        shell.addWidget(main, stretch=1)
+        page = QtWidgets.QWidget(self.page_scroll)
+        main_layout = QtWidgets.QVBoxLayout(page)
+        main_layout.setContentsMargins(16, 14, 16, 14)
+        main_layout.setSpacing(10)
 
         topbar = QtWidgets.QHBoxLayout()
+        topbar.setSpacing(12)
+        brand_mark = QtWidgets.QLabel("CB")
+        brand_mark.setObjectName("brandMark")
+        brand_mark.setFixedSize(42, 42)
+        brand_mark.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        topbar.addWidget(brand_mark)
         title_block = QtWidgets.QVBoxLayout()
+        title_block.setSpacing(1)
         eyebrow = QtWidgets.QLabel("双机课堂行为远程监测")
         eyebrow.setObjectName("mutedText")
         page_title = QtWidgets.QLabel("后端分析端")
@@ -669,8 +670,10 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         main_layout.addLayout(topbar)
 
         form = QtWidgets.QGridLayout()
-        form.setHorizontalSpacing(10)
-        form.setVerticalSpacing(10)
+        form.setHorizontalSpacing(8)
+        form.setVerticalSpacing(6)
+        for column in (1, 3, 5):
+            form.setColumnStretch(column, 1)
         self.host_edit = QtWidgets.QLineEdit("0.0.0.0")
 
         self.port_spin = QtWidgets.QSpinBox()
@@ -684,6 +687,20 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
 
         self.model_edit = QtWidgets.QLineEdit(DEFAULT_PERSON_MODEL_PATH)
 
+        self.vision_model_combo = QtWidgets.QComboBox()
+        openai_settings = load_qwen_settings(provider="openai")
+        dashscope_settings = load_qwen_settings(provider="dashscope")
+        openai_label = "GPT-5.5（OpenAI兼容）" if openai_settings.model == "gpt-5.5" else f"GPT（{openai_settings.model}）"
+        self.vision_model_combo.addItem(openai_label, "openai")
+        self.vision_model_combo.addItem(f"千问（{dashscope_settings.model}）", "dashscope")
+        selected_provider_index = self.vision_model_combo.findData(self.qwen_settings.provider)
+        if selected_provider_index >= 0:
+            self.vision_model_combo.setCurrentIndex(selected_provider_index)
+
+        self.vision_target_spin = QtWidgets.QSpinBox()
+        self.vision_target_spin.setRange(1, 200)
+        self.vision_target_spin.setValue(self.qwen_settings.max_yolo_targets)
+
         self.alarm_spin = QtWidgets.QDoubleSpinBox()
         self.alarm_spin.setRange(0.5, 30.0)
         self.alarm_spin.setDecimals(1)
@@ -695,22 +712,28 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         form.addWidget(self.host_edit, 0, 1)
         form.addWidget(QtWidgets.QLabel("端口"), 0, 2)
         form.addWidget(self.port_spin, 0, 3)
-        form.addWidget(QtWidgets.QLabel("识别模式"), 1, 0)
-        form.addWidget(self.mode_combo, 1, 1)
-        form.addWidget(QtWidgets.QLabel("模型路径"), 2, 0)
-        form.addWidget(self.model_edit, 2, 1, 1, 3)
-        form.addWidget(QtWidgets.QLabel("报警秒数"), 3, 0)
-        form.addWidget(self.alarm_spin, 3, 1)
-        form.addWidget(QtWidgets.QLabel("输出目录"), 3, 2)
-        form.addWidget(self.output_edit, 3, 3)
+        form.addWidget(QtWidgets.QLabel("识别模式"), 0, 4)
+        form.addWidget(self.mode_combo, 0, 5)
+        form.addWidget(QtWidgets.QLabel("模型路径"), 1, 0)
+        form.addWidget(self.model_edit, 1, 1, 1, 3)
+        form.addWidget(QtWidgets.QLabel("输出目录"), 1, 4)
+        form.addWidget(self.output_edit, 1, 5)
+        form.addWidget(QtWidgets.QLabel("大模型"), 2, 0)
+        form.addWidget(self.vision_model_combo, 2, 1)
+        form.addWidget(QtWidgets.QLabel("目标上限"), 2, 2)
+        form.addWidget(self.vision_target_spin, 2, 3)
+        form.addWidget(QtWidgets.QLabel("报警秒数"), 2, 4)
+        form.addWidget(self.alarm_spin, 2, 5)
 
         control_panel, control_layout = make_panel(
             "监听与模型",
             "后端保持 TCP socket 监听，按自定义 NSGD 帧包接收前端 JPEG 画面。",
         )
+        control_panel.setMaximumHeight(245)
         control_layout.addLayout(form)
 
-        test_buttons = QtWidgets.QHBoxLayout()
+        action_buttons = QtWidgets.QHBoxLayout()
+        action_buttons.setSpacing(8)
         self.image_test_button = QtWidgets.QPushButton("选择图片测试")
         self.video_test_button = QtWidgets.QPushButton("选择视频测试")
         self.stop_test_button = QtWidgets.QPushButton("停止测试")
@@ -720,27 +743,23 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         self.image_test_button.clicked.connect(self.open_image_test)
         self.video_test_button.clicked.connect(self.open_video_test)
         self.stop_test_button.clicked.connect(self.stop_local_test)
-        test_buttons.addWidget(self.image_test_button)
-        test_buttons.addWidget(self.video_test_button)
-        test_buttons.addWidget(self.stop_test_button)
-        control_layout.addLayout(test_buttons)
-
-        listen_buttons = QtWidgets.QHBoxLayout()
-        listen_buttons.addStretch(1)
         self.start_button = QtWidgets.QPushButton("开始监听")
         self.stop_button = QtWidgets.QPushButton("停止")
         set_button_role(self.start_button, "primary")
         set_button_role(self.stop_button, "danger")
         self.start_button.clicked.connect(self.start_backend)
         self.stop_button.clicked.connect(self.stop_backend)
-        listen_buttons.addWidget(self.start_button)
-        listen_buttons.addWidget(self.stop_button)
-        control_layout.addLayout(listen_buttons)
-        control_layout.addStretch(1)
+        action_buttons.addWidget(self.image_test_button)
+        action_buttons.addWidget(self.video_test_button)
+        action_buttons.addWidget(self.stop_test_button)
+        action_buttons.addStretch(1)
+        action_buttons.addWidget(self.start_button)
+        action_buttons.addWidget(self.stop_button)
+        control_layout.addLayout(action_buttons)
         main_layout.addWidget(control_panel)
 
         monitor_row = QtWidgets.QHBoxLayout()
-        monitor_row.setSpacing(18)
+        monitor_row.setSpacing(10)
 
         monitor_panel, monitor_layout = make_panel(
             "分析画面",
@@ -752,7 +771,7 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         stage_layout.setContentsMargins(0, 0, 0, 0)
         self.video_label = QtWidgets.QLabel("等待前端画面")
         self.video_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.video_label.setMinimumSize(640, 360)
+        self.video_label.setMinimumSize(480, 240)
         self.video_label.setStyleSheet("background: transparent; color: #d4d7d2;")
         stage_layout.addWidget(self.video_label)
         monitor_layout.addWidget(stage, stretch=1)
@@ -796,15 +815,23 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         self.log_text = QtWidgets.QTextEdit()
         self.log_text.setReadOnly(True)
         self.log_text.setPlaceholderText("报警日志")
-        self.log_text.setMaximumHeight(150)
+        self.log_text.setMaximumHeight(86)
         log_layout.addWidget(self.log_text)
+        log_panel.setMaximumHeight(140)
         main_layout.addWidget(log_panel)
 
+        self.page_scroll.setWidget(page)
         self.setCentralWidget(central)
         apply_dashboard_style(self)
 
     def _current_inference_mode(self) -> str:
         return str(self.mode_combo.currentData() or INFERENCE_MODE_PERSON_VLM)
+
+    def _selected_qwen_settings(self):
+        provider = str(self.vision_model_combo.currentData() or self.qwen_settings.provider)
+        settings = load_qwen_settings(provider=provider)
+        settings.max_yolo_targets = self.vision_target_spin.value()
+        return settings
 
     def _on_mode_changed(self) -> None:
         if self._current_inference_mode() == INFERENCE_MODE_PERSON_VLM:
@@ -855,7 +882,7 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         self.worker.log_ready.connect(self._append_log)
         self.worker.finished.connect(self._on_worker_finished)
         self._set_running(True)
-        self.qwen_settings = load_qwen_settings()
+        self.qwen_settings = self._selected_qwen_settings()
         self._qwen_last_upload_at = None
         self._qwen_in_flight = False
         self._qwen_cooldown_until = 0.0
@@ -899,7 +926,7 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
             return
 
         self._had_error = False
-        self.qwen_settings = load_qwen_settings()
+        self.qwen_settings = self._selected_qwen_settings()
         self._qwen_last_upload_at = None
         self._qwen_in_flight = False
         self._qwen_cooldown_until = 0.0
@@ -973,13 +1000,13 @@ class BackendMonitorWindow(QtWidgets.QMainWindow):
         if not should_use_qwen_for_scene(target_count, self.qwen_settings.max_yolo_targets):
             prepared = prepare_frame_for_qwen(frame, self.qwen_settings)
             message = (
-                f"当前 YOLO 检测到 {target_count} 个目标，超过千问少人场景阈值 "
+                f"当前 YOLO 检测到 {target_count} 个目标，超过大模型目标上限 "
                 f"{self.qwen_settings.max_yolo_targets}。\n"
-                "已跳过千问坐标检测，请以主窗口 YOLO 标注为准。\n"
-                "如需调整阈值，可设置环境变量 QWEN_MAX_YOLO_TARGETS。"
+                "已跳过大模型分析，请以主窗口 YOLO 标注为准。\n"
+                "如需调整阈值，可修改后端界面的“目标上限”。"
             )
             self.qwen_window.show_skipped(prepared, message)
-            self._append_log("千问分析已跳过：当前目标数量较多")
+            self._append_log("大模型分析已跳过：当前目标数量较多")
             return
 
         if self.qwen_worker is not None and self.qwen_worker.isRunning():
