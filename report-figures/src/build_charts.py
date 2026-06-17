@@ -5,6 +5,7 @@
 """
 import os
 from math import pi
+import csv
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
@@ -217,6 +218,48 @@ def fig_vlm_heatmap():
     save(fig, "fig_vlm_heatmap.png")
 
 
+# 7) 大模型行为分类：融合方法混淆矩阵（真实逐目标数据 CSV）
+def fig_vlm_confusion():
+    csv_path = os.path.join(OUT, "data_vlm_predictions_comparison.csv")
+    rows = []
+    with open(csv_path, encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            rows.append(r)
+
+    order = ["Hand-raise", "Reading", "Writing", "Useing-Phone", "Head-down", "Sleeping"]
+    zh = ["举手", "看书", "写字", "使用手机", "低头", "睡觉"]
+    idx = {l: i for i, l in enumerate(order)}
+    M = np.zeros((6, 6), int)
+    for r in rows:
+        if r["provider"] != "fusion":
+            continue
+        M[idx[r["truth_label"]], idx[r["pred_label"]]] += 1
+
+    row_sum = M.sum(axis=1, keepdims=True)
+    rown = np.divide(M, np.maximum(row_sum, 1))
+    fig, ax = plt.subplots(figsize=(6.8, 6.0))
+    im = ax.imshow(rown, cmap="Blues", vmin=0, vmax=1, aspect="equal")
+    for i in range(6):
+        for j in range(6):
+            ax.text(j, i, str(M[i, j]), ha="center", va="center",
+                    color="white" if rown[i, j] > 0.5 else "#333", fontsize=12,
+                    fontweight="bold" if i == j else "normal")
+    ax.set_xticks(range(6)); ax.set_xticklabels(zh, rotation=20, ha="right")
+    ax.set_yticks(range(6)); ax.set_yticklabels([f"{z}\n(n={int(row_sum[i,0])})" for i, z in enumerate(zh)])
+    ax.set_xlabel("预测类别"); ax.set_ylabel("真实类别")
+    ax.set_title("融合方法行为分类混淆矩阵（n=84，单元格为计数）")
+    # 高亮 Reading/Writing「学习」块（展示口径合并为正确）
+    from matplotlib.patches import Rectangle
+    ax.add_patch(Rectangle((0.5, 0.5), 2, 2, fill=False, edgecolor="#16a34a", lw=2.6))
+    ax.set_xticks(np.arange(-.5, 6, 1), minor=True)
+    ax.set_yticks(np.arange(-.5, 6, 1), minor=True)
+    ax.grid(which="minor", color="white", lw=1.5)
+    ax.tick_params(which="minor", length=0)
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label("行归一化比例（按真实类别）", fontsize=10)
+    save(fig, "fig_vlm_confusion.png")
+
+
 if __name__ == "__main__":
     fig_person_finetune_metrics()
     fig_person_detect_counts()
@@ -224,5 +267,5 @@ if __name__ == "__main__":
     fig_sixcls_metrics()
     fig_vlm_weighted()
     fig_vlm_radar()
-    fig_vlm_heatmap()
+    fig_vlm_confusion()
     print("ALL DONE")
