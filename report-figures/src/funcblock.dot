@@ -1,0 +1,38 @@
+digraph funcblock {
+  graph [charset="UTF-8", rankdir=TB, nodesep=0.3, ranksep=0.42, fontname="WenQuanYi Zen Hei", bgcolor="white"];
+  node  [shape=plaintext, fontname="WenQuanYi Zen Hei", fontsize=11];
+  edge  [color="#5b6b7b", penwidth=1.8, arrowsize=0.9];
+
+  A [label=<
+    <table border="1" color="#2f6fed" cellborder="1" cellspacing="0" cellpadding="9" bgcolor="#f5f9ff">
+      <tr><td colspan="3" border="0"><font color="#2f6fed"><b>① 采集子系统（前端）</b></font></td></tr>
+      <tr><td bgcolor="#eef3fb">摄像头采集</td><td bgcolor="#eef3fb">图像缩放</td><td bgcolor="#eef3fb">JPEG 编码</td></tr>
+    </table>>];
+
+  B [label=<
+    <table border="1" color="#2f6fed" cellborder="1" cellspacing="0" cellpadding="9" bgcolor="#f5f9ff">
+      <tr><td colspan="4" border="0"><font color="#2f6fed"><b>② 传输子系统（网络）</b></font></td></tr>
+      <tr><td bgcolor="#dbe8ff">NSGD 帧打包</td><td bgcolor="#eef3fb">TCP 发送</td><td bgcolor="#eef3fb">TCP 收包/拆包</td><td bgcolor="#eef3fb">帧校验与解码</td></tr>
+    </table>>];
+
+  C [label=<
+    <table border="1" color="#8b5cf6" cellborder="1" cellspacing="0" cellpadding="9" bgcolor="#f7f5ff">
+      <tr><td colspan="3" border="0"><font color="#8b5cf6"><b>③ 识别子系统（后端）</b></font></td></tr>
+      <tr><td bgcolor="#dbe8ff">YOLOv8 人体检测</td><td bgcolor="#ede9fe">编号拼图</td><td bgcolor="#ede9fe">大模型行为分类</td></tr>
+      <tr><td colspan="3" bgcolor="#fff4d6">六类 YOLO（回退方案）</td></tr>
+    </table>>];
+
+  D [label=<
+    <table border="1" color="#ef4444" cellborder="1" cellspacing="0" cellpadding="9" bgcolor="#fff6f6">
+      <tr><td colspan="3" border="0"><font color="#ef4444"><b>④ 研判与报警</b></font></td></tr>
+      <tr><td bgcolor="#fde2e1">多帧连续研判</td><td bgcolor="#fde2e1">异常目标标红</td><td bgcolor="#fde2e1">阈值报警</td></tr>
+    </table>>];
+
+  E [label=<
+    <table border="1" color="#16a34a" cellborder="1" cellspacing="0" cellpadding="9" bgcolor="#f4fbf6">
+      <tr><td colspan="3" border="0"><font color="#16a34a"><b>⑤ 展示与记录</b></font></td></tr>
+      <tr><td bgcolor="#dcfce7">Qt/Web 可视化</td><td bgcolor="#dcfce7">报警截图</td><td bgcolor="#dcfce7">CSV 日志</td></tr>
+    </table>>];
+
+  A -> B -> C -> D -> E;
+}

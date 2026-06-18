@@ -1,0 +1,17 @@
+digraph sequence {
+  graph [charset="UTF-8", rankdir=TB, nodesep=0.3, ranksep=0.42, fontname="WenQuanYi Zen Hei", bgcolor="white"];
+  node  [fontname="WenQuanYi Zen Hei", shape=box, style="rounded,filled", fontsize=12, margin="0.18,0.10"];
+  edge  [fontname="WenQuanYi Zen Hei", color="#5b6b7b", fontsize=10];
+
+  S1 [label="① 前端：采集帧 / 缩放 / JPEG 编码", fillcolor="#dbe8ff", color="#2f6fed"];
+  S2 [label="② 前端：send_packet 发送 NSGD 包头 + JPEG", fillcolor="#dbe8ff", color="#2f6fed"];
+  S3 [label="③ 后端：recvall(20) 读满 20 字节包头", fillcolor="#dcfce7", color="#16a34a"];
+  S4 [label="④ 后端：parse_header 校验魔数与长度", fillcolor="#dcfce7", color="#16a34a"];
+  S5 [label="⑤ 后端：recvall(image_len) 读满整帧 JPEG", fillcolor="#dcfce7", color="#16a34a"];
+  S6 [label="⑥ 后端：JPEG 解码 → 推理 → 研判", fillcolor="#dcfce7", color="#16a34a"];
+  S7 [label="⑦ 后端：异常持续 > 3s → 触发报警并记录", fillcolor="#fde2e1", color="#ef4444"];
+
+  S1 -> S2;
+  S2 -> S3 [label="  TCP / 无线局域网  ", color="#2f6fed", penwidth=2.2, fontcolor="#2f6fed"];
+  S3 -> S4 -> S5 -> S6 -> S7;
+}

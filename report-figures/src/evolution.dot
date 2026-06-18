@@ -1,0 +1,18 @@
+digraph evolution {
+  graph [charset="UTF-8", rankdir=LR, nodesep=0.4, ranksep=0.8, fontname="WenQuanYi Zen Hei", bgcolor="white"];
+  node  [fontname="WenQuanYi Zen Hei", shape=box, style="rounded,filled", fontsize=12, color="#9aa7b4", margin="0.2,0.12"];
+  edge  [fontname="WenQuanYi Zen Hei", color="#5b6b7b", fontsize=10];
+
+  S1 [label="方案一\n直接用六分类 YOLO\n检测课堂行为", fillcolor="#fff4d6"];
+  S2 [label="方案二\n新数据集继续训练\n六分类 YOLO + A/B 验证", fillcolor="#ffe9cc"];
+  S3 [label="方案三（最终）\nYOLO 人体检测\n+ 大模型行为分类", fillcolor="#dbe8ff"];
+
+  N1 [label="现场远景漏检\n类别混淆", shape=note, fillcolor="#fde2e1", color="#ef4444"];
+  N2 [label="指标可用但现场不稳\n写字/看书/手机重叠", shape=note, fillcolor="#fde2e1", color="#ef4444"];
+  N3 [label="人体框更稳\n行为语义更强\n六类 YOLO 保留为回退", shape=note, fillcolor="#dcfce7", color="#16a34a"];
+
+  S1 -> S2 -> S3 [penwidth=2, color="#2f6fed"];
+  S1 -> N1 [style=dashed, arrowhead=none];
+  S2 -> N2 [style=dashed, arrowhead=none];
+  S3 -> N3 [style=dashed, arrowhead=none];
+}
